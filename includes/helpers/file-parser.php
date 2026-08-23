@@ -291,3 +291,48 @@ function hinteach_parse_docx( $file_path ) {
         return new WP_Error( 'parse_error', 'Lỗi đọc file Word: ' . $e->getMessage() );
     }
 }
+
+// ──────────────────────────────────────────────────────────────
+// Helper: Chuẩn hoá ngày sinh — nhiều định dạng phổ biến → Y-m-d
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * Parse và chuẩn hoá giá trị ngày sinh thành YYYY-MM-DD.
+ *
+ * Hỗ trợ:
+ *   Y-m-d / Y/m/d  (2010-05-12, 2010/5/12 — ISO)
+ *   d/m/Y, d-m-Y, d.m.Y  (12/05/2010, 5/1/2012 — kiểu VN, có/không đệm 0)
+ *
+ * KHÔNG hỗ trợ m/d/Y (kiểu US) — tránh hiểu nhầm ngầm giữa d/m và m/d.
+ * Dùng regex + checkdate() thay vì DateTime::createFromFormat() để chấp nhận
+ * input không đệm số 0 (VD "5/1/2012") mà DateTime sẽ từ chối khi so sánh chuỗi.
+ *
+ * @param  string $value  Giá trị thô từ file import
+ * @return string|null    Ngày chuẩn YYYY-MM-DD, hoặc null nếu không parse được
+ */
+function hinteach_normalize_date( $value ) {
+    $value = trim( (string) $value );
+    if ( '' === $value ) {
+        return null;
+    }
+
+    // ISO: Y-m-d hoặc Y/m/d
+    if ( preg_match( '/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/', $value, $m ) ) {
+        list( , $y, $mo, $d ) = $m;
+        if ( checkdate( (int) $mo, (int) $d, (int) $y ) ) {
+            return sprintf( '%04d-%02d-%02d', $y, $mo, $d );
+        }
+        return null;
+    }
+
+    // d/m/Y, d-m-Y, d.m.Y — ưu tiên định dạng VN (ngày trước)
+    if ( preg_match( '#^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$#', $value, $m ) ) {
+        list( , $d, $mo, $y ) = $m;
+        if ( checkdate( (int) $mo, (int) $d, (int) $y ) ) {
+            return sprintf( '%04d-%02d-%02d', $y, $mo, $d );
+        }
+        return null;
+    }
+
+    return null;
+}

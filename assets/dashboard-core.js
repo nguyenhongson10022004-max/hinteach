@@ -247,6 +247,8 @@
              */
             confirm( message ) {
                 return new Promise( ( resolve ) => {
+                    let resolved = false;
+
                     this.open( {
                         title: 'Xác nhận',
                         body: `<p>${message}</p>`,
@@ -254,14 +256,20 @@
                             <button type="button" class="ht-btn ht-btn--secondary" id="ht-confirm-cancel">Huỷ</button>
                             <button type="button" class="ht-btn ht-btn--danger" id="ht-confirm-ok">Xác nhận</button>
                         `,
-                        onClose: () => resolve( false ),
+                        onClose: () => {
+                            if ( resolved ) return;
+                            resolved = true;
+                            resolve( false );
+                        },
                     } );
 
                     document.getElementById( 'ht-confirm-ok' )?.addEventListener( 'click', () => {
+                        resolved = true;
                         this.close();
                         resolve( true );
                     } );
                     document.getElementById( 'ht-confirm-cancel' )?.addEventListener( 'click', () => {
+                        resolved = true;
                         this.close();
                         resolve( false );
                     } );

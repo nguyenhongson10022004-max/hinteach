@@ -351,8 +351,9 @@ const StudentsModule = {
             payload.class_id = classSelect.value;
         }
 
+        const submitBtn = document.getElementById( 'ht-import-submit' );
+
         try {
-            const submitBtn = document.getElementById( 'ht-import-submit' );
             if ( submitBtn ) { submitBtn.disabled = true; submitBtn.textContent = 'Đang import...'; }
 
             const result = await HT.api.call( 'hinteach_student_import', payload );
@@ -385,7 +386,7 @@ const StudentsModule = {
 
         } catch ( err ) {
             HT.utils.toast( err.message, 'error' );
-            const submitBtn = document.getElementById( 'ht-import-submit' );
+        } finally {
             if ( submitBtn ) { submitBtn.disabled = false; submitBtn.textContent = 'Import'; }
         }
     },

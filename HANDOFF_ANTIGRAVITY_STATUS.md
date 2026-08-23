@@ -1,4 +1,4 @@
-# HINTEACH — TÌNH TRẠNG CODE ANTIGRAVITY (2026-08-23)
+# HINTEACH — TÌNH TRẠNG CODE ANTIGRAVITY (2026-08-24)
 > File handoff để AI agent khác (hoặc chính Antigravity phiên mới) đọc và tiếp tục đúng chỗ đang dừng.
 > Dùng cùng bộ: `CLAUDE.md` (root+includes+assets), `IMPLEMENTATION_PLAN.md`, 4 `AI_TASK_BUILD_*.md`.
 > Copy file này vào thư mục gốc `HinTeach/` để nó luôn đi cùng project.
@@ -16,27 +16,38 @@ Antigravity (model Claude Opus 4.6) đã tạo xong theo đúng `IMPLEMENTATION_
 | `includes/roles-capabilities.php` | ✅ Đủ 3 role (HinTeach Admin/Giáo viên/Trợ giảng), `hinteach_user_can_module()` chạy đúng |
 | `includes/shortcodes.php` | ✅ Render đúng shell 6 tab theo role, chặn đúng người không có quyền |
 | `includes/ajax-classes.php` | ✅ Đã test tạo lớp (session/course), sửa lớp, gán học sinh, validate course thiếu ngày — **đã review code, đủ 4 lớp bảo vệ (nonce → module permission → teacher_id → capability)** |
-| `includes/ajax-students.php` | ✅ Đã test thêm học sinh thành công |
-| `includes/helpers/file-parser.php` | ⚠️ Có code, **CHƯA test thật** (chưa thử Import file Excel/CSV/Word) |
-| `assets/dashboard-core.js` + `dashboard-shell.js` | ✅ Router, lazy-load module, modal system — chạy ổn sau khi fix bug (xem phần Bug đã fix) |
+| `includes/ajax-students.php` | ✅ Đã test thêm học sinh thành công — đã fix bug dob import + thêm duplicate check (phiên 2026-08-24) |
+| `includes/helpers/file-parser.php` | ⚠️ Có code + thêm `hinteach_normalize_date()` (phiên 2026-08-24), **CHƯA test thật** (chưa thử Import file Excel/CSV/Word) |
+| `assets/dashboard-core.js` + `dashboard-shell.js` | ✅ Router, lazy-load module, modal system — đã fix bug confirm dialog (phiên 2026-08-24) |
 | `assets/modules/classes.js` | ✅ Đã test tạo/sửa lớp thành công qua UI thật |
-| `assets/modules/students.js` | ✅ Đã test thêm học sinh thành công qua UI thật |
+| `assets/modules/students.js` | ✅ Đã test thêm học sinh — đã fix bug import button stuck (phiên 2026-08-24) |
 | `build.mjs` + `package.json` | ✅ Build chạy được (`npm run build` → `assets/dist/`) |
 
 **CHƯA CODE (đúng phạm vi, không phải thiếu sót):** Giai đoạn 3 (Thời khoá biểu), Giai đoạn 4 (Học phí), Giai đoạn 5 (Điểm số/Nhật ký), Giai đoạn 6 (Tài khoản/License), toàn bộ quiz-engine (hoãn).
 
 ---
 
-## 2 BUG ĐÃ TÌM RA VÀ ĐÃ FIX (bởi Claude review code + Antigravity sửa)
+## 8 BUG ĐÃ TÌM RA VÀ ĐÃ FIX
+
+### Phiên 2026-08-23 (Claude review code + Antigravity sửa)
 
 1. **Sai tên file module lazy-load**: `dashboard-core.js` ghép URL dạng `${tabName}.min.js` nhưng `build.mjs` xuất file không có đuôi `.min`. → Đã fix: thêm `entryNames: '[name].min'` vào `modulesConfig` trong `build.mjs`.
 2. **Tab mặc định trỏ vào module chưa tồn tại**: tab "Tổng quan" (`key='dashboard'`) không có module JS tương ứng (ngoài phạm vi Giai đoạn 1+2) → mở trang lần đầu luôn lỗi. → Đã fix: comment out tab "Tổng quan" trong `hinteach_get_tabs_for_role()` (`shortcodes.php`), kèm `// TODO`, tab mặc định giờ là "Lớp học".
 
+### Phiên 2026-08-24 (Antigravity — Claude Opus 4.6)
+
+3. **Bug ngày sinh khi import (dob → 0000-00-00)**: Cột `dob` khi import không được validate/chuẩn hoá định dạng. Khi giá trị không đúng `YYYY-MM-DD` (VD nhập `12/05/2010` kiểu VN), MySQL âm thầm lưu thành `0000-00-00`. → **Đã fix**: thêm hàm `hinteach_normalize_date($value)` vào `includes/helpers/file-parser.php`, dùng `regex + checkdate()` (xem bug #7 bên dưới cho lý do không dùng `DateTime::createFromFormat`). Nếu không parse được → dòng bị bỏ qua hoàn toàn với lỗi rõ ràng, **KHÔNG insert `0000-00-00`**. Hàm cũng được dùng trong `hinteach_ajax_student_save()` (form thủ công) để nhất quán.
+4. **Import trùng lặp học sinh**: Khi import file có tên + SĐT trùng với học sinh đã tồn tại của cùng giáo viên, hệ thống tạo bản ghi trùng. → **Đã fix**: thêm kiểm tra trùng trước khi insert. Có SĐT → check `name + phone`; không có SĐT nhưng có dob → fallback check `name + dob`; không có cả 2 → không chặn (xem bug #8 bên dưới). Response JSON kèm trường `duplicated`.
+5. **Nút "Xoá" (học sinh VÀ lớp) không hoạt động**: `HT.modal.confirm()` trong `dashboard-core.js` gọi `this.close()` trước `resolve(true)`, nhưng `close()` gọi `onClose()` → `resolve(false)` chạy trước. Promise chỉ nhận resolve đầu tiên nên LUÔN trả `false` dù bấm "Xác nhận". → **Đã fix**: thêm cờ `let resolved = false` trong Promise executor; nút OK/Cancel set `resolved = true` trước khi `close()`; `onClose` kiểm tra cờ và chỉ resolve nếu chưa resolved.
+6. **Import học sinh có dòng trùng: nút bị kẹt ở "Đang import..."**: Trong `submitImport()` (`students.js`), đoạn reset nút submit (`disabled = false`, `textContent = 'Import'`) chỉ nằm trong `catch` — nhánh `try` (thành công) không reset. → **Đã fix**: chuyển `submitBtn` ra ngoài `try`, đặt reset vào khối `finally` để LUÔN chạy dù thành công hay lỗi.
+7. **`hinteach_normalize_date()` từ chối oan ngày hợp lệ không đệm số 0**: Hàm cũ dùng `DateTime::createFromFormat()` rồi so sánh chuỗi `$dt->format($fmt) === $value` để chống rollover. Nhưng PHP luôn xuất bản đệm 0 ("15/01/2012") → input không đệm 0 ("15/1/2012") không bao giờ khớp → trả null oan. → **Đã fix**: thay toàn bộ bằng `regex + checkdate()`, chấp nhận `\d{1,2}` cho ngày/tháng. Đồng thời bỏ `m/d/Y` (kiểu US) để tránh hiểu nhầm ngầm d/m vs m/d — sản phẩm chỉ hỗ trợ VN (d/m/Y) và ISO (Y-m-d).
+8. **Học sinh không có SĐT: import lặp không giới hạn**: Đoạn check trùng cũ chỉ chạy `if ($phone)` → học sinh thiếu SĐT bỏ qua hoàn toàn bước check → import lại bao nhiêu lần cũng tạo thêm bấy nhiêu bản ghi. → **Đã fix**: thêm `elseif ($dob)` fallback check theo `name + dob` khi không có SĐT. Nếu không có cả SĐT lẫn dob → không chặn (tránh chặn oan 2 học sinh trùng tên thật, để giáo viên tự xử lý).
+
 ---
 
-## ⚠️ 1 BUG NHỎ CÒN TỒN ĐỌNG — CHƯA FIX
+## ⚠️ BUG CÒN TỒN ĐỌNG — CHƯA FIX
 
-**Lỗi hiển thị thông báo AJAX**: khi backend trả lỗi (`wp_send_json_error`), frontend chỉ hiện `HTTP 400: Bad Request` chung chung thay vì đọc đúng `response.data.message` (VD lẽ ra phải hiện "Chế độ khóa học yêu cầu ngày bắt đầu và kết thúc."). Không chặn tiến độ, nhưng nên fix trước khi làm Giai đoạn 3, vì lỗi này sẽ lặp lại ở mọi module sau. Sửa ở phần xử lý lỗi trong `HT.api.call()` (`dashboard-core.js`).
+Không có bug tồn đọng đã xác định tại thời điểm này. Bug hiển thị message AJAX đã được fix (code `HT.api.call()` hiện đọc đúng `errJson?.data?.message` từ `wp_send_json_error`).
 
 ---
 
@@ -61,6 +72,7 @@ Antigravity (model Claude Opus 4.6) đã tạo xong theo đúng `IMPLEMENTATION_
 - **File JS**: sửa xong **BẮT BUỘC** chạy `npm run build` trong Terminal (đứng đúng tại `C:\CLASS\HinTeach-CLAUDE-md\HinTeach`) rồi mới refresh (`Ctrl+Shift+R` để xoá cache trình duyệt) — nếu quên bước này, thay đổi JS sẽ KHÔNG có hiệu lực dù code đã sửa đúng.
 - **Terminal trong Antigravity mặc định là PowerShell**, đã chạy `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` để cho phép chạy npm — không cần làm lại nếu dùng cùng máy.
 - **Node.js đã cài** (bản LTS, `node -v` → v24.19.0).
+- **Composer + PhpSpreadsheet**: đã chạy `composer require phpoffice/phpspreadsheet --ignore-platform-reqs` (phiên 2026-08-24) → cài thành công `phpoffice/phpspreadsheet` v5.9.0 + `phpoffice/phpword` v1.1.0. Thư mục `vendor/` đã thêm vào `.gitignore`. Để cài lại trên máy khác: `composer install --ignore-platform-reqs`.
 - **Tài khoản test**: username `teacher_test` / role "HinTeach Giáo viên" — dùng để test giao diện giáo viên. Tài khoản admin gốc WP riêng (`sonskt2002`) vẫn còn, dùng khi cần vào `wp-admin` full quyền (tạo trang, sửa user khác...).
 - **Trang chứa dashboard**: slug `dashboard` (`hinteach.local/dashboard/`), nội dung trang chỉ có `[hinteach_dashboard]`.
 - **⚠️ CHƯA khởi tạo Git** cho project này — nên làm `git init` + commit checkpoint đầu tiên càng sớm càng tốt, hiện chưa có điểm lùi nếu code bị sửa hỏng.
@@ -79,8 +91,15 @@ Antigravity (model Claude Opus 4.6) đã tạo xong theo đúng `IMPLEMENTATION_
 
 - [ ] Tạo lớp `course` với đủ ngày bắt đầu/kết thúc → lưu thành công, hiển thị đúng "Theo khoá"
 - [ ] Tạo lớp `monthly` → UI ẩn đúng phần ngày tháng, chỉ hiện học phí/tháng
-- [ ] Xoá lớp đang có học sinh → có cảnh báo/xác nhận đúng spec không
+- [ ] Xoá lớp đang có học sinh → bấm "Xác nhận" → lớp bị xoá thành công (test bug #5 đã fix)
+- [ ] Xoá học sinh → bấm "Xác nhận" → học sinh bị xoá thành công (test bug #5 đã fix)
 - [ ] Import file học sinh (Excel/CSV/Word) — cả trường hợp đúng và trường hợp lỗi (>500 dòng, thiếu cột bắt buộc)
+- [ ] Import file với ngày sinh định dạng VN (`12/05/2010`) → xác nhận lưu đúng `2010-05-12`
+- [ ] Import file với ngày sinh KHÔNG đệm 0 (`5/1/2012`) → xác nhận lưu đúng `2012-01-05` (test bug #7)
+- [ ] Import file có dòng trùng (tên + SĐT) với học sinh đã có → xác nhận bỏ qua + báo "đã tồn tại" + nút Import reset (test bug #6)
+- [ ] Import file có dòng trùng (tên + ngày sinh, KHÔNG có SĐT) → xác nhận bỏ qua + báo "đã tồn tại" (test bug #8)
+- [ ] Import file có dòng KHÔNG có SĐT VÀ KHÔNG có dob → xác nhận vẫn import bình thường (không chặn oan)
+- [ ] Import file có dòng ngày sinh sai hoàn toàn (VD "abc", "32/13/2010") → xác nhận bỏ qua + báo lỗi rõ ràng
 - [ ] Test với role "HinTeach Trợ giảng" (chưa bật bất kỳ module nào) → xác nhận sidebar rỗng đúng
 - [ ] Giáo viên A tạo tài khoản `teacher_test`, thử tạo thêm 1 tài khoản giáo viên B khác → xác nhận A không thấy dữ liệu của B
 
@@ -88,8 +107,8 @@ Antigravity (model Claude Opus 4.6) đã tạo xong theo đúng `IMPLEMENTATION_
 
 ## THỨ TỰ ĐỀ XUẤT KHI QUAY LẠI
 
-1. Fix bug hiển thị message lỗi AJAX (nhỏ, nhanh) — làm trước khi qua giai đoạn mới để không lặp lại lỗi này ở mọi module sau.
-2. Hoàn tất checklist "CHƯA TEST" ở trên cho Giai đoạn 1+2.
+1. **`npm run build`** — BẮT BUỘC sau khi sửa JS (bug #5, #6) trước khi test.
+2. Hoàn tất checklist "CHƯA TEST" ở trên cho Giai đoạn 1+2 (đặc biệt: xoá học sinh, xoá lớp, import trùng).
 3. `git init` + commit checkpoint (nếu chưa làm).
 4. Bắt đầu Giai đoạn 3 (Thời khoá biểu) — đọc `AI_TASK_BUILD_SCHEDULE.md` trước khi giao Antigravity, nhớ áp dụng quyết định "tự sinh buổi 3 tháng" cho `schedule_type=fixed` đã chốt tạm thời ở trên.
 5. Giai đoạn 4 (Học phí) — code luôn phần "tự sinh `tuition_adjustments`" đã chốt tạm thời, xoá 2 dòng `// TODO` trong `ajax-classes.php`.

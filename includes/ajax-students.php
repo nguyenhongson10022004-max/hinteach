@@ -168,9 +168,9 @@ function hinteach_ajax_student_save() {
         wp_send_json_error( array( 'message' => 'Tên học sinh không được để trống.' ), 400 );
     }
 
-    // Validate dob format
-    if ( $dob && ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $dob ) ) {
-        $dob = null;
+    // Validate dob format — chuẩn hoá nhiều định dạng
+    if ( $dob ) {
+        $dob = hinteach_normalize_date( $dob );
     }
 
     $data = array(
@@ -328,23 +328,78 @@ function hinteach_ajax_student_import() {
     $s_table   = $wpdb->prefix . 'hinteach_students';
     $imported  = 0;
     $skipped   = 0;
+    $duplicated = 0;
     $class_id  = isset( $_POST['class_id'] ) ? absint( $_POST['class_id'] ) : 0;
 
     foreach ( $rows as $index => $row ) {
+        $row_num = $index + 2; // +2 vì dòng 1 là header, index bắt đầu từ 0
+
         $name = isset( $row['name'] ) ? sanitize_text_field( trim( $row['name'] ) ) : '';
         if ( empty( $name ) ) {
             $errors[] = array(
-                'row'     => $index + 2,  // +2 vì dòng 1 là header, index bắt đầu từ 0
+                'row'     => $row_num,
                 'message' => 'Tên học sinh trống.',
             );
             $skipped++;
             continue;
         }
 
+        // ── Chuẩn hoá ngày sinh ──
+        $dob = null;
+        if ( ! empty( $row['dob'] ) ) {
+            $dob = hinteach_normalize_date( $row['dob'] );
+            if ( null === $dob ) {
+                $errors[] = array(
+                    'row'     => $row_num,
+                    'message' => 'Ngày sinh không đúng định dạng (nhận được: "' . sanitize_text_field( $row['dob'] ) . '"), dòng bị bỏ qua.',
+                );
+                $skipped++;
+                continue;
+            }
+        }
+
+        $phone = isset( $row['phone'] ) ? sanitize_text_field( $row['phone'] ) : null;
+
+        // ── Kiểm tra trùng lặp: tên + SĐT, hoặc tên + ngày sinh nếu không có SĐT ──
+        $existing = null;
+
+        if ( $phone ) {
+            $existing = $wpdb->get_var( $wpdb->prepare(
+                "SELECT id FROM {$s_table}
+                 WHERE teacher_id = %d AND name = %s AND phone = %s AND deleted_at IS NULL
+                 LIMIT 1",
+                $access['teacher_id'],
+                $name,
+                $phone
+            ) );
+        } elseif ( $dob ) {
+            // Không có SĐT → fallback check theo tên + ngày sinh
+            $existing = $wpdb->get_var( $wpdb->prepare(
+                "SELECT id FROM {$s_table}
+                 WHERE teacher_id = %d AND name = %s AND dob = %s AND deleted_at IS NULL
+                 LIMIT 1",
+                $access['teacher_id'],
+                $name,
+                $dob
+            ) );
+        }
+        // Nếu vừa không có SĐT vừa không có dob → không đủ dữ liệu để chắc chắn là trùng,
+        // KHÔNG tự ý chặn (tránh chặn oan 2 học sinh trùng tên thật), để giáo viên tự xử lý sau.
+
+        if ( $existing ) {
+            $errors[] = array(
+                'row'     => $row_num,
+                'message' => 'Học sinh "' . $name . '" đã tồn tại (trùng tên + ngày sinh hoặc SĐT), bỏ qua.',
+            );
+            $duplicated++;
+            $skipped++;
+            continue;
+        }
+
         $data = array(
             'name'       => $name,
-            'dob'        => isset( $row['dob'] ) ? sanitize_text_field( $row['dob'] ) : null,
-            'phone'      => isset( $row['phone'] ) ? sanitize_text_field( $row['phone'] ) : null,
+            'dob'        => $dob,
+            'phone'      => $phone,
             'email'      => isset( $row['email'] ) ? sanitize_email( $row['email'] ) : null,
             'note'       => isset( $row['note'] ) ? sanitize_textarea_field( $row['note'] ) : null,
             'teacher_id' => $access['teacher_id'],
@@ -357,7 +412,7 @@ function hinteach_ajax_student_import() {
 
         if ( ! $new_student_id ) {
             $errors[] = array(
-                'row'     => $index + 2,
+                'row'     => $row_num,
                 'message' => 'Lỗi khi lưu vào database.',
             );
             $skipped++;
@@ -379,11 +434,12 @@ function hinteach_ajax_student_import() {
     }
 
     wp_send_json_success( array(
-        'message'  => "Đã import {$imported} học sinh.",
-        'imported' => $imported,
-        'skipped'  => $skipped,
-        'errors'   => $errors,
-        'total'    => count( $rows ),
+        'message'    => "Đã import {$imported} học sinh.",
+        'imported'   => $imported,
+        'skipped'    => $skipped,
+        'duplicated' => $duplicated,
+        'errors'     => $errors,
+        'total'      => count( $rows ),
     ) );
 }
 
