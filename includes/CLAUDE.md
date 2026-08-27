@@ -1,6 +1,6 @@
 # includes/ — BACKEND CONTEXT
 > Thuộc plugin `hinteach` | Đọc `../CLAUDE.md` trước file này
-> Cập nhật sau khi đối chiếu bundle.js + HTML thật (2026-08-23)
+> Cập nhật: 2026-08-27 — sửa references cho khớp cấu trúc docs/ mới.
 
 ---
 
@@ -91,7 +91,7 @@ Viết 3 hàm riêng hoặc 1 hàm dispatch theo `billing_mode`, KHÔNG cố g�
 - `calc_type`: `amount` (số tiền cố định) hoặc `percent` (phần trăm học phí gốc)
 - Scope: theo lớp (student_id NULL) hoặc theo học sinh cụ thể
 - Áp dụng theo khoảng `month_from → month_to` ("Bảo lưu đến"), KHÔNG áp dụng vĩnh viễn nếu không chọn
-- **Riêng biệt với phụ thu lúc tạo lớp** (`classes.surcharge_name/surcharge_amount`) — CẦN LÀM RÕ quan hệ 2 cơ chế này trước khi code (đề xuất: tạo lớp có phụ thu mặc định → tự sinh 1 record `wp_hinteach_tuition_adjustments` scope=lớp, month_from=tháng tạo lớp, không có month_to; giáo viên có thể sửa/xoá sau như adjustment bình thường) — **XÁC NHẬN VỚI NGƯỜI DÙNG TRƯỚC KHI CODE, không tự quyết định**.
+- **Riêng biệt với phụ thu mặc định lúc tạo lớp** (`classes.surcharge_name/surcharge_amount`) — CẦN LÀM RÕ quan hệ 2 cơ chế này trước khi code. Xem thêm `docs/specs/tuition.md` và `STATUS.md` mục "Decisions Not Yet Implemented".
 
 ---
 
@@ -135,6 +135,6 @@ hinteach_parse_uploaded_table( $file_path, $expected_columns ) : array
 
 ## CẦN XÁC NHẬN THÊM (chưa đủ dữ liệu để quyết định)
 
-1. Quan hệ giữa "lịch cố định" khi tạo lớp (`schedule_type='fixed'` + `fixed_weekdays`) và "lặp lịch" khi ghi buổi học ở Thời khoá biểu — tạo lớp fixed có tự sinh buổi lặp luôn không, hay chỉ là gợi ý mặc định khi mở form ghi buổi?
-2. Quan hệ phụ thu lúc tạo lớp vs bảng `tuition_adjustments` (nêu trên).
-3. Cần HAR thật để xác nhận cấu trúc response API và validate lỗi server — xem `../CLAUDE.md` phần cuối.
+1. Quan hệ giữa "lịch cố định" khi tạo lớp (`schedule_type='fixed'` + `fixed_weekdays`) và "lặp lịch" — xem `docs/specs/schedule.md` và `STATUS.md` mục "Decisions Not Yet Implemented".
+2. Quan hệ phụ thu lúc tạo lớp vs bảng `tuition_adjustments` — xem `docs/specs/tuition.md` và `STATUS.md` mục "Decisions Not Yet Implemented".
+3. Server gốc đã bị suspended — kế hoạch lấy HAR dừng vô thời hạn. Xem `STATUS.md` mục "Known Limitations".

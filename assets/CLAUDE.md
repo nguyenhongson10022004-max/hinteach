@@ -1,6 +1,6 @@
 # assets/ — FRONTEND CONTEXT
 > Thuộc plugin `hinteach` | Đọc `../CLAUDE.md` trước file này
-> Cập nhật sau khi đối chiếu bundle.js + HTML thật (2026-08-23)
+> Cập nhật: 2026-08-27 — sửa references cho khớp cấu trúc docs/ mới.
 
 ---
 
@@ -38,12 +38,12 @@ Form tạo/sửa lớp có 4 phần, đúng thứ tự quan sát từ bản gố
    - `session` → hiện "Học phí/buổi"
    - `course` → hiện "Học phí/khóa" + 2 field ngày bắt đầu/kết thúc khóa
    - `monthly` → hiện "Học phí/tháng"
-   - Kèm field phụ thu mặc định (tên + mức) ngay trong form này — xem `includes/CLAUDE.md` phần cần xác nhận thêm về quan hệ với `tuition_adjustments`
+   - Kèm field phụ thu mặc định (tên + mức) ngay trong form này — xem `includes/CLAUDE.md` và `docs/specs/tuition.md` phần quan hệ với `tuition_adjustments`
    - Sau khi lớp đã có buổi học, `billingMode` + phí bị KHOÁ (hiện note cảnh báo), phải sửa riêng theo từng học sinh qua `fee_override`
 3. Lịch học: `scheduleType` = `flexible` (mặc định) hoặc `fixed` (chọn thứ trong tuần + giờ bắt đầu/kết thúc)
 4. Chọn học sinh: multi-select, có nút tạo nhanh học sinh mới ngay trong modal
 
-**Khi render form/preview học phí, PHẢI dispatch theo đúng `billingMode`** — không dùng chung 1 hàm tính hiển thị cho cả 3, xem công thức chi tiết ở `includes/CLAUDE.md`.
+**Khi render form/preview học phí, PHẢI dispatch theo đúng `billingMode`** — không dùng chung 1 hàm cho cả 3. Xem công thức chi tiết ở `includes/CLAUDE.md` và `docs/specs/tuition.md`.
 
 ---
 
