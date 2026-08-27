@@ -2,8 +2,20 @@
 
 > Module: Schedule | Status: **NOT STARTED** (GĐ3)
 > Xem `STATUS.md` cho trạng thái hiện tại.
-> Spec cập nhật: 2026-08-27 — đối chiếu HAR thực tế HAR 3.1–3.11 (nttclass.com).
-> Nguồn ưu tiên: HAR thực tế > checkpoint phân tích > spec cũ.
+> Spec cập nhật: 2026-08-28 — chốt quyết định thiết kế HinTeach sau review kiến trúc; đối chiếu HAR 3.1–3.11 (nttclass.com).
+> Nguồn ưu tiên: HAR thực tế > quyết định thiết kế HinTeach > spec cũ.
+
+---
+
+## Phân loại evidence
+
+Mọi rule trong spec này được gán 1 trong 3 nhãn:
+
+- **[HAR CONFIRMED]** — có bằng chứng trực tiếp từ HAR capture thực tế (HAR 3.x).
+- **[HINTEACH DESIGN DECISION]** — quyết định thiết kế nội bộ của HinTeach, không phụ thuộc và không nhất thiết trùng behavior của nttclass/hệ thống tham khảo.
+- **[CHƯA XÁC NHẬN]** — chưa có HAR hoặc quyết định dứt khoát; rule cũ được giữ tạm thời.
+
+> ⚠️ Implementation detail của nttclass (tên field, flag, endpoint) **không** tự động trở thành requirement của HinTeach. Chỉ lấy business logic cốt lõi và tự map sang pattern HinTeach.
 
 ---
 
@@ -33,7 +45,7 @@ GĐ3 **không** bao gồm:
 ### Buổi học (Session)
 
 Mỗi buổi học là 1 record DB, đại diện cho một khoảng thời gian giảng dạy cụ thể.
-Field nghiệp vụ cốt lõi (xác nhận HAR 3.1–3.2):
+Field nghiệp vụ cốt lõi **[HAR CONFIRMED — HAR 3.1–3.2]**:
 
 | Field | Mô tả |
 |---|---|
@@ -54,11 +66,14 @@ Field nghiệp vụ cốt lõi (xác nhận HAR 3.1–3.2):
 | `completed` | Đã diễn ra hay chưa |
 | `paid` | Trạng thái thanh toán chung |
 | `recurrenceGroupId` | ID nhóm chuỗi lặp (`null` nếu buổi đơn lẻ) |
-| `recurrenceSequence` | Vị trí trong chuỗi lặp (`null` nếu buổi đơn lẻ; base = 0) |
+
+> **[HAR CONFIRMED]** HAR recurrence đã quan sát `recurrenceSequence` trên các session trong chuỗi (base = 0, các buổi tiếp theo tăng dần). Đây là behavior/data quan sát từ hệ thống tham khảo, không đồng nghĩa HinTeach bắt buộc phải persist một cột tương đương.
+
+> **`recurrenceSequence` — [CHƯA QUYẾT ĐỊNH]:** HinTeach hiện chưa có cột `recurrence_sequence`. Implementation plan phải so sánh phương án xác định thứ tự bằng `repeat_group_id + date/start_time` với phương án thêm `recurrence_sequence` trước khi quyết định.
 
 ### Per-student detail (`studentDetails`)
 
-Mỗi học sinh trong buổi có detail riêng (xác nhận HAR 3.1, 3.2):
+Mỗi học sinh trong buổi có detail riêng **[HAR CONFIRMED — HAR 3.1, 3.2]**:
 
 | Field | Mô tả |
 |---|---|
@@ -66,41 +81,52 @@ Mỗi học sinh trong buổi có detail riêng (xác nhận HAR 3.1, 3.2):
 | `attitude` | Thái độ học tập |
 | `individualComment` | Nhận xét riêng cho học sinh này |
 | `note` | Ghi chú |
-| `feeAmount` | Học phí của học sinh này trong buổi |
+| `feeAmount` | Học phí per-student — xem quy tắc bên dưới |
 | `paid` | Đã thu hay chưa |
 
-### Recurrence Group
+### Quy tắc `feeAmount` (session_students) — [HINTEACH DESIGN DECISION]
+
+- `session_students.fee_amount` **mặc định = `NULL`**.
+- Giá thông thường được **tính động** khi cần: `session.price / số học sinh đang trả tiền trong buổi`.
+- `fee_amount` chỉ được ghi vào DB khi có **manual override** hoặc **per-student override** (giá khác với chia đều).
+- Không persist fee_amount chia đều vào DB — tránh denormalize và tránh phải cập nhật lại khi `price` thay đổi.
+
+> HAR 3.1 quan sát `feeAmount học sinh = price buổi` (1 mẫu 1-1). HAR 3.2 quan sát `price = Σ feeAmount` (mẫu 3 HS × 250,000 = 750,000).
+> Đây là **observation từ hệ thống tham khảo**, không phải rule bắt buộc HinTeach phải persist.
+
+### Recurrence Group — [HAR CONFIRMED — HAR 3.3–3.6]
 
 Chuỗi buổi lặp liên kết qua `recurrenceGroupId` dùng chung.
-`recurrenceSequence` tăng dần từ 0: base session = 0, các repeat = 1, 2, ...
+
+> **`recurrenceSequence` — [CHƯA QUYẾT ĐỊNH]:** Xem Mục 4 để biết 2 phương án so sánh. Chưa quyết định thêm cột này vào schema.
 
 ---
 
 ## 3. Tạo Buổi Học
 
-### 3a. Buổi 1-1 (type = "riêng") — xác nhận HAR 3.1
+### 3a. Buổi 1-1 (type = "riêng") — [HAR CONFIRMED — HAR 3.1]
 
 - `type = "riêng"`.
 - `studentIds` chứa đúng 1 học sinh.
-- `recurrenceGroupId = null`, `recurrenceSequence = null`.
+- `recurrenceGroupId = null`.
 - `studentDetails` có 1 entry tương ứng.
-- **Quan sát fee (1 mẫu HAR):** `feeAmount` của học sinh = `price` buổi. Chưa đủ dữ liệu để khẳng định rule tổng quát — **CHƯA XÁC NHẬN**.
+- `fee_amount = NULL` theo default (xem Mục 2 — Quy tắc feeAmount).
 
-### 3b. Buổi lớp nhiều học sinh (type = "chung") — xác nhận HAR 3.2
+### 3b. Buổi lớp nhiều học sinh (type = "chung") — [HAR CONFIRMED — HAR 3.2]
 
 - `type = "chung"`.
 - `studentIds` chứa nhiều học sinh.
-- `recurrenceGroupId = null`, `recurrenceSequence = null` nếu không lặp.
+- `recurrenceGroupId = null` nếu không lặp.
 - `studentDetails` có 1 entry per học sinh.
-- **Quan sát fee (mẫu 3 HS):** `price` (session) = tổng `feeAmount` các học sinh. Mẫu: 3 HS × 250,000 = 750,000. Chưa đủ dữ liệu để khẳng định rule phân chia tổng quát — **CHƯA XÁC NHẬN**.
+- `fee_amount = NULL` theo default; giá chia đều tính động khi cần, không persist.
 
-> Việc phân chia feeAmount theo `billing_mode = 'session'` (chia đều hay không) cần xác nhận thêm. Xem `docs/specs/tuition.md` mục `session / fee_override`.
+> Phân chia feeAmount theo `billing_mode = 'session'` — xem `docs/specs/tuition.md` mục `session / fee_override`.
 
 ---
 
 ## 4. Recurrence / Lịch Lặp
 
-### Business rule cốt lõi (xác nhận HAR 3.3–3.6)
+### Business rule cốt lõi — [HAR CONFIRMED — HAR 3.3–3.6]
 
 **Frontend tính trước toàn bộ danh sách ngày lặp và gửi dạng `baseSession + repeatDates[]` lên server.**
 
@@ -122,7 +148,21 @@ Response:
 ```
 
 - Tất cả session trong chuỗi chia sẻ cùng `recurrenceGroupId`.
-- `recurrenceSequence` tăng dần từ 0 (base = 0, repeat = 1, 2, ...).
+
+### Xác định "following" trong chuỗi — [HINTEACH DESIGN DECISION]
+
+"following" = buổi đang chọn + **tất cả session có position cao hơn** trong cùng `recurrenceGroupId`.
+Không dùng rule `date < today` — xem Mục 7b.
+
+Implementation plan phải so sánh 2 phương án trước khi code:
+
+| Phương án | Cách xác định "following" | Ghi chú |
+|---|---|---|
+| **A** — dùng `repeat_group_id` + `date`/`start_time` | Filter: cùng group AND `date >= target_date` (hoặc `start_time >=`) | Không thêm cột mới |
+| **B** — thêm `recurrence_sequence` | Filter: cùng group AND `recurrence_sequence >= target_sequence` | Cần thêm cột + migration |
+
+Tiêu chí đánh giá: **correctness, performance, migration compatibility, complexity**.
+Quyết định cuối nằm trong implementation plan, không phải ở spec này.
 
 ### UI phải hỗ trợ 4 kiểu sinh ngày lặp
 
@@ -180,18 +220,24 @@ Mẫu HAR 3.5: base 2026-08-28, repeatDates [2026-09-25, 2026-10-23] — phù h�
 
 ---
 
-## 5. Conflict Detection (xác nhận HAR 3.6)
+## 5. Conflict Detection
 
 > **Rule cũ ĐÃ BỊ HAR BÁC BỎ:**
 > ~~"Tạo buổi mới, học sinh đã có buổi khác cùng giờ → cảnh báo, không chặn cứng."~~
 
-**Rule mới (xác nhận HAR 3.6):**
+### 5a. Batch-create conflict — [HAR CONFIRMED — HAR 3.6]
 
-- Khi tạo lịch (đơn lẻ hoặc batch), nếu xảy ra trùng lịch → **server trả `409 Conflict` và CHẶN thao tác lưu**.
+- Khi tạo batch (chuỗi lặp), nếu xảy ra trùng lịch → **server trả `409 Conflict` và CHẶN thao tác lưu**.
 - Response 409 chứa thông tin buổi xung đột: `id`, `date`, `startTime`, `endTime`, `sessionName`.
 - Client phải xử lý 409 và hiển thị thông tin conflict để người dùng giải quyết (VD xoá buổi trùng) trước khi thử lại.
 
-> **Scope đã test:** HAR 3.6 xác nhận trong batch create. Behavior khi edit gây conflict — **CHƯA XÁC NHẬN**.
+### 5b. Single-create conflict — [HINTEACH DESIGN DECISION]
+
+- Khi tạo buổi đơn lẻ, nếu xảy ra trùng lịch → **server cũng trả `409 Conflict` và CHẶN lưu**.
+- Áp dụng cùng behavior 409 như batch-create để đảm bảo nhất quán.
+- HAR 3.6 chỉ xác nhận batch; HinTeach mở rộng sang single-create theo quyết định thiết kế nội bộ.
+
+> **Conflict khi edit — [CHƯA XÁC NHẬN]:** HAR 3.6 chỉ xác nhận trong create. Behavior khi edit gây conflict chưa được đặc tả; sẽ xác định trong implementation plan.
 
 ---
 
@@ -218,7 +264,7 @@ Ví dụ quan sát từ HAR:
 
 Khi sửa buổi thuộc chuỗi lặp, **LUÔN hỏi rõ scope**: "chỉ buổi này" hay "buổi này và các buổi sau".
 
-### 7a. updateScope = "single" (xác nhận HAR 3.7)
+### 7a. updateScope = "single" — [HAR CONFIRMED — HAR 3.7]
 
 - Chỉ sửa đúng 1 buổi được chọn.
 - Response: `updatedCount = 1, createdCount = 0, scope = "single"`.
@@ -226,25 +272,33 @@ Khi sửa buổi thuộc chuỗi lặp, **LUÔN hỏi rõ scope**: "chỉ buổi
 > **Rule cũ ĐÃ BỊ HAR BÁC BỎ:**
 > ~~"Chỉ buổi này: tách khỏi group (repeat_group_id = NULL hoặc is_exception = true)."~~
 
-**Rule mới (xác nhận HAR 3.7):** Buổi được sửa **giữ nguyên `recurrenceGroupId` và `recurrenceSequence`**. Không bị tách khỏi chuỗi.
+**Rule mới [HAR CONFIRMED — HAR 3.7]:** Buổi được sửa **giữ nguyên `recurrenceGroupId`**. Không bị tách khỏi chuỗi.
 
-Implementation cần hỗ trợ các flag đi kèm request sửa (xác nhận HAR 3.7):
+**`is_exception` — [HINTEACH DESIGN DECISION]:**
+- Không xóa cột `is_exception` khỏi schema lúc này.
+- **Không dùng `is_exception`** để biểu diễn semantics "single-edit detach" (HAR bác bỏ pattern này).
+- `is_exception` không có ý nghĩa nghiệp vụ trong GĐ3; sẽ đánh giá lại trong giai đoạn sau nếu cần.
 
-- `pricingChanged`
-- `manualPriceOverride`
-- `sessionFeeChanged`
-- `repriceExistingFees`
-- `propagateDisplayColor`
-- `createRepeatDates`
+**6 implementation fields quan sát từ HAR nttclass — KHÔNG phải HinTeach requirement:**
 
-### 7b. updateScope = "following" (xác nhận HAR 3.8)
+> HAR 3.7 quan sát các field `pricingChanged`, `manualPriceOverride`, `sessionFeeChanged`,
+> `repriceExistingFees`, `propagateDisplayColor`, `createRepeatDates` đi kèm request sửa trong nttclass.
+> **HinTeach không coi đây là business contract bắt buộc.**
+> Đây là implementation detail của hệ thống tham khảo; semantics chưa được xác nhận.
+> HinTeach không implement các field này trừ khi business behavior thực sự cần.
+> Riêng `propagateDisplayColor`: **không dùng trong generic session edit** — xem Mục 10.
+
+### 7b. updateScope = "following" — [HAR CONFIRMED — HAR 3.8]
 
 - Sửa buổi hiện tại + tất cả buổi sau trong cùng `recurrenceGroupId`.
-- Các buổi **trước** buổi hiện tại (sequence nhỏ hơn) không bị ảnh hưởng.
+- **"following" = buổi đang chọn + các session có position cao hơn trong chuỗi** (xem phương án A/B ở Mục 4).
+- Các buổi **trước** buổi hiện tại trong chuỗi không bị ảnh hưởng.
 - Response: `updatedCount = N` (N = số buổi từ current trở đi), `scope = "following"`.
-- HAR 3.8: sequence 0 (trước) giữ nguyên; sequence 1 (current), 2, 3 được cập nhật.
+- HAR 3.8: session trước giữ nguyên; current + các session sau được cập nhật.
 
-> **Không động vào buổi đã qua:** Khi scope = "following", không update record có `date < ngày hiện tại`.
+**[HINTEACH DESIGN DECISION] — Không dùng rule `date < today`:**
+- "following" được xác định **hoàn toàn theo position trong chuỗi**, không phụ thuộc ngày hiện tại.
+- Rule "không update buổi đã qua" (lọc theo `date < today`) **bị loại bỏ khỏi GĐ3**: chưa có evidence HAR và chưa có requirement sản phẩm rõ ràng.
 
 ---
 
@@ -274,9 +328,15 @@ Implementation cần hỗ trợ các flag đi kèm request sửa (xác nhận HA
 
 ## 9. Session Journal & Score Integration (GĐ3 ↔ GĐ5 boundary)
 
-**Quick-entry** là tính năng ghi nhanh nhật ký và điểm ngay trong màn hình buổi học (xác nhận HAR 3.10).
+**Quick-entry** là tính năng ghi nhanh nhật ký và điểm ngay trong màn hình buổi học **[HAR CONFIRMED — HAR 3.10]**.
 
-### Payload quick-entry
+### Scope quick-entry — [HINTEACH DESIGN DECISION]
+
+- Quick-entry **chỉ áp dụng cho đúng `sessionId` đang mở**.
+- **Không propagate** `content`, `homeworkContent`, `studentDetails`, `scoreGroups` sang các session following.
+- Nếu cần cập nhật hàng loạt nội dung buổi, đó là feature riêng và phải spec riêng.
+
+### Payload quick-entry — [HAR CONFIRMED — HAR 3.10]
 
 GĐ3 phải implement action quick-entry trong `ajax-schedule.php`:
 
@@ -299,11 +359,11 @@ GĐ3 phải implement action quick-entry trong `ajax-schedule.php`:
   individualComment: "...",
   note: "...",
   paid: bool,
-  feeAmount: number
+  feeAmount: number    // chỉ ghi nếu có manual override; NULL = tính động
 }
 ```
 
-**scoreGroups schema (xác nhận HAR 3.10):**
+**scoreGroups schema [HAR CONFIRMED — HAR 3.10]:**
 
 ```
 scoreGroups: [
@@ -335,19 +395,24 @@ scoreGroups: [
 
 ---
 
-## 10. Display Color (xác nhận HAR 3.11)
+## 10. Display Color — [HAR CONFIRMED — HAR 3.11] + [HINTEACH DESIGN DECISION]
 
 - Mỗi session có `displayColor` (hex string, VD `#RRGGBB`).
+- Đổi màu là **action riêng biệt**, tách khỏi generic session edit.
 - Action đổi màu nhận payload: `{ displayColor: "#RRGGBB" }`.
 
-### Behavior trong recurrence chain (xác nhận HAR 3.11)
+### Behavior trong recurrence chain
 
-- Khi đổi màu session thuộc recurrence chain: **tự propagate cho current session + tất cả session sau (following)** trong cùng `recurrenceGroupId`.
+- Khi đổi màu session thuộc recurrence chain: **tự propagate cho current session + tất cả session sau (following)** trong cùng `recurrenceGroupId`. **[HAR CONFIRMED — HAR 3.11]**
 - Request không cần gửi scope riêng — server tự xử lý propagation.
-- Mẫu HAR 3.11: target = sequence 1, `updatedCount = 3` (sequence 1, 2, 3); sequence 0 không đổi.
+- "following" cùng định nghĩa với Mục 7b: theo position trong chuỗi, không theo `date < today`. **[HINTEACH DESIGN DECISION]**
+- Mẫu HAR 3.11: target = session có position 1 (tính từ 0), `updatedCount = 3` (current + 2 following); session trước không đổi.
 
-> **Các scope màu khác — CHƯA XÁC NHẬN TỪ HAR:** Không tự thêm behavior "đổi chỉ 1 buổi",
-> "đổi toàn bộ chuỗi", hay scope khác nếu chưa có bằng chứng.
+**`propagateDisplayColor` — [KHÔNG DÙNG trong generic edit]:** **[HINTEACH DESIGN DECISION]**
+- Field `propagateDisplayColor` quan sát từ HAR nttclass **không được tích hợp** vào generic session edit payload.
+- HinTeach dùng action đổi màu riêng với propagation tự động "current + following".
+
+> **Các scope màu khác — [CHƯA XÁC NHẬN]:** Không tự thêm behavior "đổi chỉ 1 buổi" hay "đổi toàn bộ chuỗi" nếu chưa có bằng chứng.
 
 ---
 
@@ -406,18 +471,26 @@ dựa trên quyết định thiết kế nội bộ, không phụ thuộc behavi
 - Nếu implementation GĐ3 phát hiện cần thêm field, phải cập nhật `db-schema.php` và
   `includes/CLAUDE.md` trước, không tự thêm ngoài file đó.
 
+**Quyết định schema liên quan GĐ3:**
+
+| Cột | Quyết định |
+|---|---|
+| `is_exception` | **Giữ nguyên** — không xóa; **không dùng** để biểu diễn single-edit detach (xem Mục 7a) |
+| `recurrence_sequence` | **Chưa thêm** — phải so sánh phương án A vs B (xem Mục 4) trong implementation plan trước khi quyết định |
+| `fee_amount` (session_students) | **Giữ nguyên** — default `NULL`; chỉ ghi khi có override (xem Mục 2) |
+
 ---
 
 ## 15. Edge Cases
 
 | Case | Trạng thái |
 |---|---|
-| Monthly fallback: tháng thiếu occurrence (VD tháng 2 không có tuần 5) | **CHƯA XÁC NHẬN TỪ HAR** — giữ rule cũ: lùi về occurrence cuối cùng của thứ đó trong tháng, không skip tháng |
-| Hard limit 366 buổi | **CHƯA XÁC NHẬN TỪ HAR** — giữ rule cũ: chặn tại vòng lặp sinh ngày |
-| Daily: ngày nằm giữa khoảng không xuất hiện trong repeatDates (HAR 3.4) | **CHƯA XÁC NHẬN** lý do — cần thêm HAR hoặc test nội bộ |
-| Conflict khi edit (không phải create) gây trùng lịch | **CHƯA XÁC NHẬN TỪ HAR** — HAR 3.6 chỉ xác nhận trong create/batch |
-| Recurrence sequence sau delete following: các sequence còn lại có tự renumber không | **CHƯA XÁC NHẬN TỪ HAR** |
-| Fee phân chia giữa các học sinh trong buổi chung (rule tổng quát) | **CHƯA XÁC NHẬN TỪ HAR** — xem `docs/specs/tuition.md` |
+| Monthly fallback: tháng thiếu occurrence (VD tháng 2 không có tuần 5) | **[CHƯA XÁC NHẬN]** — giữ rule cũ: lùi về occurrence cuối cùng của thứ đó trong tháng, không skip tháng |
+| Hard limit 366 buổi | **[CHƯA XÁC NHẬN]** — giữ rule cũ: chặn tại vòng lặp sinh ngày, cả client lẫn server |
+| Daily: ngày nằm giữa khoảng không xuất hiện trong repeatDates (HAR 3.4) | **[CHƯA XÁC NHẬN]** lý do — cần thêm HAR hoặc test nội bộ |
+| Conflict khi edit (không phải create) gây trùng lịch | **[CHƯA XÁC NHẬN]** — HAR 3.6 chỉ xác nhận create/batch; sẽ xác định trong implementation plan |
+| Recurrence renumber sau delete following | **[CHƯA XÁC NHẬN]** — phụ thuộc phương án A/B chọn ở Mục 4 |
+| Fee phân chia giữa các học sinh trong buổi chung (rule tổng quát) | **[HINTEACH DESIGN DECISION]** — fee_amount = NULL mặc định; tính động khi cần; xem `docs/specs/tuition.md` |
 
 ---
 
@@ -431,21 +504,24 @@ dựa trên quyết định thiết kế nội bộ, không phụ thuộc behavi
 
 ## 17. Acceptance Criteria / Test Expectations
 
-- [ ] Tạo buổi đơn type="riêng" (1 HS) → hiện đúng trên lịch, `recurrenceGroupId = null`
-- [ ] Tạo buổi đơn type="chung" (nhiều HS) → hiện đúng, `studentDetails` đúng per-HS
-- [ ] Lặp `daily` từ A đến B → đúng số buổi liên tiếp, cùng `recurrenceGroupId`, sequence tăng từ 0
-- [ ] Lặp `weekly` chọn T2/T4/T6 → đúng số buổi, đúng thứ, cùng group
-- [ ] Lặp `monthly` "thứ 3 tuần 2" → đúng ngày theo rule "thứ N của tháng"
+- [ ] Tạo buổi đơn type="riêng" (1 HS) → `recurrenceGroupId = null`, `fee_amount = NULL` trong DB **[HAR CONFIRMED]**
+- [ ] Tạo buổi đơn type="chung" (nhiều HS) → `studentDetails` đúng per-HS, `fee_amount = NULL` **[HAR CONFIRMED]**
+- [ ] Lặp `daily` từ A đến B → đúng số buổi liên tiếp, cùng `recurrenceGroupId` **[HAR CONFIRMED]**
+- [ ] Lặp `weekly` chọn T2/T4/T6 → đúng số buổi, đúng thứ, cùng group **[HAR CONFIRMED]**
+- [ ] Lặp `monthly` "thứ 3 tuần 2" → đúng ngày theo rule "thứ N của tháng" **[HAR CONFIRMED một phần]**
 - [ ] Lặp `custom` chọn tay ngày → tạo đúng danh sách, cùng group
-- [ ] Lặp vượt 366 buổi → dừng đúng ở 366 *(CHƯA XÁC NHẬN TỪ HAR — giữ rule)*
-- [ ] Conflict: tạo lịch trùng → server 409, không lưu, client hiển thị thông tin conflict
-- [ ] Duration: client gửi duration sai → server lưu đúng theo `startTime`/`endTime`
-- [ ] Sửa "single" → `updatedCount=1`, `recurrenceGroupId` giữ nguyên, buổi khác trong chuỗi không đổi
-- [ ] Sửa "following" → current + future đổi, buổi trước không đổi
-- [ ] Xoá "single" → `deletedCount=1`, buổi khác trong chuỗi không đổi
-- [ ] Xoá "following" → current + future xoá, buổi trước không đổi
-- [ ] Xoá buổi `billing_mode='session'` → học phí giảm *(CHƯA XÁC NHẬN TỪ HAR — giữ rule)*
-- [ ] Xoá buổi `billing_mode='monthly'` → học phí KHÔNG đổi *(CHƯA XÁC NHẬN TỪ HAR — giữ rule)*
-- [ ] Quick-entry: lưu journal + `scoreGroups` → server tạo score records gắn `sessionId`
-- [ ] Đổi màu buổi trong chuỗi → current + following đổi màu, buổi trước không đổi
-- [ ] Filter lịch — **CHƯA XÁC NHẬN TỪ HAR**
+- [ ] Lặp vượt 366 buổi → dừng đúng ở 366 **[CHƯA XÁC NHẬN — giữ rule]**
+- [ ] Conflict batch-create: tạo batch trùng → server 409, không lưu, client hiển thị conflict **[HAR CONFIRMED]**
+- [ ] Conflict single-create: tạo buổi đơn trùng → server 409, không lưu **[HINTEACH DESIGN DECISION]**
+- [ ] Duration: client gửi duration sai → server lưu đúng theo `startTime`/`endTime` **[HAR CONFIRMED]**
+- [ ] Sửa "single" → `updatedCount=1`, `recurrenceGroupId` giữ nguyên, buổi khác không đổi **[HAR CONFIRMED]**
+- [ ] Sửa "following" → current + following theo position đổi, buổi trước không đổi, **không lọc theo ngày hôm nay** **[HINTEACH DESIGN DECISION]**
+- [ ] Xoá "single" → `deletedCount=1`, buổi khác trong chuỗi không đổi **[HAR CONFIRMED]**
+- [ ] Xoá "following" → current + following theo position xoá, buổi trước không đổi **[HAR CONFIRMED + HINTEACH DESIGN DECISION]**
+- [ ] Xoá buổi `billing_mode='session'` → học phí giảm **[CHƯA XÁC NHẬN — giữ rule]**
+- [ ] Xoá buổi `billing_mode='monthly'` → học phí KHÔNG đổi **[CHƯA XÁC NHẬN — giữ rule]**
+- [ ] Quick-entry: chỉ cập nhật đúng `sessionId` đang mở, không propagate sang following **[HINTEACH DESIGN DECISION]**
+- [ ] Quick-entry: lưu journal + `scoreGroups` → server tạo score records gắn `sessionId` **[HAR CONFIRMED]**
+- [ ] Đổi màu (action riêng): buổi trong chuỗi → current + following đổi màu theo position, buổi trước không đổi **[HAR CONFIRMED + HINTEACH DESIGN DECISION]**
+- [ ] Đổi màu buổi đơn lẻ (không thuộc chuỗi) → chỉ buổi đó đổi
+- [ ] Filter lịch — **[CHƯA XÁC NHẬN]**
