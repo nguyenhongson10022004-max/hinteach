@@ -69,7 +69,7 @@ Field nghiệp vụ cốt lõi **[HAR CONFIRMED — HAR 3.1–3.2]**:
 
 > **[HAR CONFIRMED]** HAR recurrence đã quan sát `recurrenceSequence` trên các session trong chuỗi (base = 0, các buổi tiếp theo tăng dần). Đây là behavior/data quan sát từ hệ thống tham khảo, không đồng nghĩa HinTeach bắt buộc phải persist một cột tương đương.
 
-> **`recurrenceSequence` — [CHƯA QUYẾT ĐỊNH]:** HinTeach hiện chưa có cột `recurrence_sequence`. Implementation plan phải so sánh phương án xác định thứ tự bằng `repeat_group_id + date/start_time` với phương án thêm `recurrence_sequence` trước khi quyết định.
+> **`recurrenceSequence` — [HINTEACH DESIGN DECISION]:** HinTeach **không thêm** cột `recurrence_sequence` trong GĐ3. Thứ tự recurrence xác định bằng tuple `(repeat_group_id, date, start_time, id)` — xem chi tiết Mục 4.
 
 ### Per-student detail (`studentDetails`)
 
@@ -98,7 +98,7 @@ Mỗi học sinh trong buổi có detail riêng **[HAR CONFIRMED — HAR 3.1, 3.
 
 Chuỗi buổi lặp liên kết qua `recurrenceGroupId` dùng chung.
 
-> **`recurrenceSequence` — [CHƯA QUYẾT ĐỊNH]:** Xem Mục 4 để biết 2 phương án so sánh. Chưa quyết định thêm cột này vào schema.
+> **`recurrenceSequence` — [HINTEACH DESIGN DECISION]:** Không thêm cột này trong GĐ3. Thứ tự xác định bằng tuple `(repeat_group_id, date, start_time, id)` — xem Mục 4.
 
 ---
 
@@ -154,15 +154,28 @@ Response:
 "following" = buổi đang chọn + **tất cả session có position cao hơn** trong cùng `recurrenceGroupId`.
 Không dùng rule `date < today` — xem Mục 7b.
 
-Implementation plan phải so sánh 2 phương án trước khi code:
+**Quyết định đã chốt — [HINTEACH DESIGN DECISION]:**
 
-| Phương án | Cách xác định "following" | Ghi chú |
-|---|---|---|
-| **A** — dùng `repeat_group_id` + `date`/`start_time` | Filter: cùng group AND `date >= target_date` (hoặc `start_time >=`) | Không thêm cột mới |
-| **B** — thêm `recurrence_sequence` | Filter: cùng group AND `recurrence_sequence >= target_sequence` | Cần thêm cột + migration |
+- Không thêm cột `recurrence_sequence` trong GĐ3.
+- "following" xác định bằng tuple lexicographic `(repeat_group_id, date, start_time, id)`:
 
-Tiêu chí đánh giá: **correctness, performance, migration compatibility, complexity**.
-Quyết định cuối nằm trong implementation plan, không phải ở spec này.
+```sql
+-- Predicate cho "current + following"
+repeat_group_id = :target_group
+AND deleted_at IS NULL
+AND (
+    date > :target_date
+    OR (date = :target_date AND start_time > :target_start_time)
+    OR (date = :target_date AND start_time = :target_start_time AND id >= :target_id)
+)
+```
+
+- Không dùng `date >= X` một mình — phải đủ 3 tầng để xử lý đúng nhiều session cùng ngày/cùng giờ.
+
+**Quy tắc FREEZE bắt buộc (UPDATE/DELETE scope=following và đổi màu propagate):**
+1. Query và FREEZE danh sách target session IDs dựa trên giá trị **hiện tại** (trước bất kỳ thay đổi nào).
+2. Thực hiện UPDATE/DELETE lên đúng tập ID đã freeze.
+**KHÔNG** update `date`/`start_time` của session đang chọn trước rồi mới query lại following — sẽ làm sai lệch tập bị ảnh hưởng.
 
 ### UI phải hỗ trợ 4 kiểu sinh ngày lặp
 
@@ -291,7 +304,7 @@ Khi sửa buổi thuộc chuỗi lặp, **LUÔN hỏi rõ scope**: "chỉ buổi
 ### 7b. updateScope = "following" — [HAR CONFIRMED — HAR 3.8]
 
 - Sửa buổi hiện tại + tất cả buổi sau trong cùng `recurrenceGroupId`.
-- **"following" = buổi đang chọn + các session có position cao hơn trong chuỗi** (xem phương án A/B ở Mục 4).
+- **"following" = buổi đang chọn + các session có position cao hơn trong chuỗi** (xem quyết định recurrence ordering ở Mục 4).
 - Các buổi **trước** buổi hiện tại trong chuỗi không bị ảnh hưởng.
 - Response: `updatedCount = N` (N = số buổi từ current trở đi), `scope = "following"`.
 - HAR 3.8: session trước giữ nguyên; current + các session sau được cập nhật.
@@ -476,7 +489,7 @@ dựa trên quyết định thiết kế nội bộ, không phụ thuộc behavi
 | Cột | Quyết định |
 |---|---|
 | `is_exception` | **Giữ nguyên** — không xóa; **không dùng** để biểu diễn single-edit detach (xem Mục 7a) |
-| `recurrence_sequence` | **Chưa thêm** — phải so sánh phương án A vs B (xem Mục 4) trong implementation plan trước khi quyết định |
+| recurrence_sequence | **[HINTEACH DESIGN DECISION]** — Không thêm trong GĐ3, xem Mục 4
 | `fee_amount` (session_students) | **Giữ nguyên** — default `NULL`; chỉ ghi khi có override (xem Mục 2) |
 
 ---
@@ -489,7 +502,7 @@ dựa trên quyết định thiết kế nội bộ, không phụ thuộc behavi
 | Hard limit 366 buổi | **[CHƯA XÁC NHẬN]** — giữ rule cũ: chặn tại vòng lặp sinh ngày, cả client lẫn server |
 | Daily: ngày nằm giữa khoảng không xuất hiện trong repeatDates (HAR 3.4) | **[CHƯA XÁC NHẬN]** lý do — cần thêm HAR hoặc test nội bộ |
 | Conflict khi edit (không phải create) gây trùng lịch | **[CHƯA XÁC NHẬN]** — HAR 3.6 chỉ xác nhận create/batch; sẽ xác định trong implementation plan |
-| Recurrence renumber sau delete following | **[CHƯA XÁC NHẬN]** — phụ thuộc phương án A/B chọn ở Mục 4 |
+| Recurrence renumber sau delete following | **[HINTEACH DESIGN DECISION]** — Không áp dụng: HinTeach không persist `recurrence_sequence`, nên không có gì để renumber; thứ tự luôn tính động theo tuple ở Mục 4
 | Fee phân chia giữa các học sinh trong buổi chung (rule tổng quát) | **[HINTEACH DESIGN DECISION]** — fee_amount = NULL mặc định; tính động khi cần; xem `docs/specs/tuition.md` |
 
 ---
