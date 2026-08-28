@@ -108,3 +108,13 @@ Không có bug tồn đọng đã xác định tại thời điểm này.
 ## Next Recommended Task
 1. Hoàn tất checklist test chưa chạy cho GĐ2 (đặc biệt: xóa lớp/học sinh, import file, role trợ giảng).
 2. Bắt đầu GĐ3 (Thời khoá biểu) — đọc `docs/specs/schedule.md` trước khi code.
+
+## GĐ3 Migration Notes
+
+### Database upgrade strategy
+
+- M0B đã cập nhật schema trong `includes/db-schema.php`.
+- Khi deploy/update plugin đã có database cũ, cần đảm bảo `HINTEACH_DB_VERSION`
+  được tăng để trigger `hinteach_check_db_version()` chạy lại `dbDelta()`.
+- Hiện tại chưa áp dụng thay đổi version vì project chưa có production database.
+- Trước khi release production cần review lại migration upgrade flow.
