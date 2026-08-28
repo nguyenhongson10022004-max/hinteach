@@ -64,6 +64,7 @@ require_once HINTEACH_PATH . 'includes/roles-capabilities.php';
 require_once HINTEACH_PATH . 'includes/shortcodes.php';
 require_once HINTEACH_PATH . 'includes/ajax-classes.php';
 require_once HINTEACH_PATH . 'includes/ajax-students.php';
+require_once HINTEACH_PATH . 'includes/ajax-schedule.php';
 require_once HINTEACH_PATH . 'includes/helpers/file-parser.php';
 
 // ══════════════════════════════════════════════════════════

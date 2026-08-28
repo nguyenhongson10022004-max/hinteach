@@ -32,6 +32,7 @@ const modulesConfig = {
     entryPoints: [
         './assets/modules/classes.js',
         './assets/modules/students.js',
+        './assets/modules/schedule.js',
     ],
     outdir:     './assets/dist/modules',
     format:     'esm',  // Giữ ESM cho dynamic import()
