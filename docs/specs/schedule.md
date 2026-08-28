@@ -151,7 +151,8 @@ Response:
 
 ### Xác định "following" trong chuỗi — [HINTEACH DESIGN DECISION]
 
-"following" = buổi đang chọn + **tất cả session có position cao hơn** trong cùng `recurrenceGroupId`.
+"following" = buổi đang chọn + tất cả session xếp sau nó trong cùng recurrenceGroupId,
+theo thứ tự `(date, start_time, id)`.
 Không dùng rule `date < today` — xem Mục 7b.
 
 **Quyết định đã chốt — [HINTEACH DESIGN DECISION]:**
