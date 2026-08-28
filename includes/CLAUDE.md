@@ -14,12 +14,12 @@
 | `wp_hinteach_students` | name, dob, phone, email, note | |
 | `wp_hinteach_student_user_map` | student_id, user_id | 1-1, nullable — hoãn nếu chưa cần tài khoản học sinh (gắn với quiz) |
 | `wp_hinteach_student_class` | student_id, class_id, fee_override | N-N, fee_override CHỈ áp dụng ý nghĩa khi lớp đó `billing_mode = 'session'` |
-| `wp_hinteach_sessions` | class_id, date, start_time, end_time, price (tổng thu buổi đó), type (`riêng`/`chung`), content, homework_content (BTVN giao chung cho buổi), display_color, repeat_group_id, is_exception (bool) | `type='riêng'` = 1 học sinh, `type='chung'` = nhóm — ảnh hưởng màu mặc định |
+| `wp_hinteach_sessions` | class_id, date, start_time, end_time, price, type, session_name (nullable), content, homework_content (BTVN giao chung cho buổi), general_comment (nhận xét chung cho buổi, nullable), display_color, repeat_group_id, is_exception (bool) | `type='riêng'` = 1 học sinh, `type='chung'` = nhóm — ảnh hưởng màu mặc định |
 | `wp_hinteach_session_students` | session_id, student_id, fee_amount (override riêng buổi này nếu có), paid (bool), homework (enum: `0%/30%/50%/70%/100%`), attitude (TEXT tự do, không phải điểm số), individual_comment, note | Nguồn DUY NHẤT cho điểm danh + nhật ký học tập |
 | `wp_hinteach_billing_payments` | student_id, class_id, period_key (VD: `2026-08` hoặc `course:2026-01-01:2026-06-30`), paid (bool), amount_paid | CHỈ dùng cho `billing_mode IN ('course','monthly')` — không liên quan `wp_hinteach_payments` |
 | `wp_hinteach_payments` | student_id, class_id, session_id (nullable), amount, paid_at, note | Lịch sử thu tiền THẬT cho chế độ `session` — mỗi lần xác nhận thu = 1 record mới, không update đè |
 | `wp_hinteach_tuition_adjustments` | student_id (nullable)/class_id (nullable), type (`surcharge`/`discount`), calc_type (`amount`/`percent`), value, month_from, month_to, note | scope: nếu `student_id` NULL → áp dụng cả lớp; đúng field UI: `tuitionAdjustmentType`, `tuitionAdjustmentMode`, `tuitionAdjustmentValue`, `tuitionAdjustmentMonthStart/End` |
-| `wp_hinteach_grades` | student_id, class_id, test_name, score, scale, type (`homework`/`test`/`final`), date, note | KHÔNG có type=`quiz` ở giai đoạn hiện tại (hoãn cùng quiz-engine) |
+| `wp_hinteach_grades` | student_id, class_id, session_id (nullable — liên kết buổi học khi điểm được nhập qua quick-entry GD3), test_name, score, scale, type (`homework`/`test`/`final`), date, note | KHÔNG có type=`quiz` ở giai đoạn hiện tại (hoãn cùng quiz-engine) |
 | `wp_hinteach_assistant_permissions` | assistant_user_id, module_key, enabled | module_key thuộc tập: `dashboard, scheduler, tuition, students, classProfiles` (đúng như `assistantPermissionDefinitions()` trong bundle.js) |
 | `wp_hinteach_license` | user_id, expires_at, status (`active`/`grace`/`locked`/`exempt`), last_confirmed_at | |
 

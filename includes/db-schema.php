@@ -121,8 +121,10 @@ function hinteach_create_tables() {
         end_time TIME DEFAULT NULL,
         price DECIMAL(12,0) NOT NULL DEFAULT 0,
         type ENUM('riêng','chung') NOT NULL DEFAULT 'chung',
+        session_name VARCHAR(255) DEFAULT NULL,
         content TEXT DEFAULT NULL,
         homework_content TEXT DEFAULT NULL,
+        general_comment TEXT DEFAULT NULL,
         display_color VARCHAR(7) DEFAULT NULL,
         repeat_group_id BIGINT UNSIGNED DEFAULT NULL,
         is_exception TINYINT(1) NOT NULL DEFAULT 0,
@@ -132,7 +134,7 @@ function hinteach_create_tables() {
         PRIMARY KEY  (id),
         KEY idx_class_id (class_id),
         KEY idx_date (date),
-        KEY idx_repeat_group_id (repeat_group_id),
+        KEY idx_repeat_group_date (repeat_group_id, date, start_time),
         KEY idx_deleted_at (deleted_at)
     ) $charset_collate;";
 
@@ -242,6 +244,7 @@ function hinteach_create_tables() {
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
         student_id BIGINT UNSIGNED NOT NULL,
         class_id BIGINT UNSIGNED NOT NULL,
+        session_id BIGINT UNSIGNED DEFAULT NULL,
         test_name VARCHAR(255) NOT NULL,
         score DECIMAL(5,2) DEFAULT NULL,
         scale DECIMAL(5,2) NOT NULL DEFAULT 10,
@@ -254,6 +257,7 @@ function hinteach_create_tables() {
         PRIMARY KEY  (id),
         KEY idx_student_id (student_id),
         KEY idx_class_id (class_id),
+        KEY idx_session_id (session_id),
         KEY idx_deleted_at (deleted_at)
     ) $charset_collate;";
 
