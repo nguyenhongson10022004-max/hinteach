@@ -86,22 +86,31 @@
                 }
 
                 if ( ! response.ok ) {
-                    // Cố đọc JSON body để lấy message từ wp_send_json_error()
-                    let serverMsg = '';
+                    // Cố đọc JSON body để lấy data từ wp_send_json_error()
+                    let serverMsg  = '';
+                    let serverData = null;
                     try {
                         const errJson = await response.json();
-                        serverMsg = errJson?.data?.message || errJson?.data || '';
+                        serverData = errJson?.data || null;
+                        serverMsg  = ( typeof serverData === 'object' && serverData !== null )
+                            ? ( serverData.message || '' )
+                            : String( serverData || '' );
                     } catch ( _parseErr ) {
                         // Response không phải JSON — bỏ qua
                     }
-                    throw new Error( serverMsg || `HTTP ${response.status}: ${response.statusText}` );
+                    const err    = new Error( serverMsg || `HTTP ${response.status}: ${response.statusText}` );
+                    err.status     = response.status;
+                    err.serverData = serverData;
+                    throw err;
                 }
 
                 const json = await response.json();
 
                 if ( ! json.success ) {
                     const msg = json.data?.message || json.data || 'Có lỗi xảy ra.';
-                    throw new Error( msg );
+                    const err    = new Error( msg );
+                    err.serverData = json.data || null;
+                    throw err;
                 }
 
                 return json.data;

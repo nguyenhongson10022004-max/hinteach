@@ -31,10 +31,15 @@ const ScheduleModule = {
             <div class="ht-module ht-module--schedule">
                 <div class="ht-module__header">
                     <h2 class="ht-module__title">Thời khoá biểu</h2>
+                    <button type="button" class="ht-btn ht-btn--primary" id="ht-session-add">+ Tạo buổi mới</button>
                 </div>
                 <div id="ht-schedule-calendar"></div>
             </div>
         `;
+
+        // Bind sự kiện tạo buổi
+        document.getElementById( 'ht-session-add' )
+            ?.addEventListener( 'click', () => this._openCreateForm() );
 
         await this._render();
     },
@@ -228,6 +233,310 @@ const ScheduleModule = {
     _fmtTime( timeStr ) {
         if ( ! timeStr ) return '';
         return timeStr.slice( 0, 5 );
+    },
+
+    // ──────────────────────────────────────────────────────────
+    // M2: Tạo buổi học
+    // ──────────────────────────────────────────────────────────
+
+    /**
+     * Mở form tạo buổi học mới.
+     * Load danh sách lớp, hiển modal, bind events.
+     */
+    async _openCreateForm() {
+        // Load danh sách lớp
+        let classes = [];
+        try {
+            const data = await HT.api.call( 'hinteach_class_list', {}, 'POST' );
+            classes = data.classes || [];
+        } catch ( err ) {
+            HT.utils.toast( 'Không thể tải danh sách lớp: ' + err.message, 'error' );
+            return;
+        }
+
+        if ( ! classes.length ) {
+            HT.utils.toast( 'Chưa có lớp học nào. Vui lòng tạo lớp trước.', 'error' );
+            return;
+        }
+
+        const today = this._toIso( new Date() );
+
+        HT.modal.open( {
+            title: 'Tạo buổi học mới',
+            body: this._buildCreateFormHtml( classes, today ),
+            footer: `
+                <button type="button" class="ht-btn ht-btn--secondary" id="ht-session-form-cancel">Huỷ</button>
+                <button type="button" class="ht-btn ht-btn--primary" id="ht-session-form-save">Tạo buổi</button>
+            `,
+        } );
+
+        // Bind events
+        document.getElementById( 'ht-session-form-cancel' )
+            ?.addEventListener( 'click', () => HT.modal.close() );
+        document.getElementById( 'ht-session-form-save' )
+            ?.addEventListener( 'click', () => this._saveSession() );
+        document.getElementById( 'ht-sf-class' )
+            ?.addEventListener( 'change', ( e ) => this._onClassChange( e.target.value ) );
+        document.querySelectorAll( 'input[name="type"]' ).forEach( r => {
+            r.addEventListener( 'change', () => this._onTypeChange() );
+        } );
+        document.getElementById( 'ht-sf-color-toggle' )
+            ?.addEventListener( 'change', ( e ) => {
+                const colorInput = document.getElementById( 'ht-sf-color' );
+                if ( colorInput ) colorInput.disabled = ! e.target.checked;
+            } );
+    },
+
+    /**
+     * Build HTML form tạo buổi học.
+     *
+     * @param {Array} classes    Danh sách lớp
+     * @param {string} defaultDate  YYYY-MM-DD
+     * @returns {string} HTML
+     */
+    _buildCreateFormHtml( classes, defaultDate ) {
+        return `
+            <form id="ht-session-form" class="ht-form">
+                <fieldset class="ht-form__fieldset">
+                    <legend>Lớp học</legend>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label" for="ht-sf-class">Lớp *</label>
+                        <select id="ht-sf-class" name="class_id" class="ht-form__select" required>
+                            <option value="">-- Chọn lớp --</option>
+                            ${classes.map( c => `<option value="${c.id}" data-fee="${c.fee_amount || 0}">${HT.utils.escapeHtml( c.name )}</option>` ).join( '' )}
+                        </select>
+                    </div>
+                </fieldset>
+
+                <fieldset class="ht-form__fieldset">
+                    <legend>Thời gian</legend>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label" for="ht-sf-date">Ngày *</label>
+                        <input type="date" id="ht-sf-date" name="date" class="ht-form__input" required value="${defaultDate}" />
+                    </div>
+                    <div class="ht-form__row">
+                        <div class="ht-form__row-half">
+                            <label class="ht-form__label" for="ht-sf-start">Bắt đầu *</label>
+                            <input type="time" id="ht-sf-start" name="start_time" class="ht-form__input" required />
+                        </div>
+                        <div class="ht-form__row-half">
+                            <label class="ht-form__label" for="ht-sf-end">Kết thúc *</label>
+                            <input type="time" id="ht-sf-end" name="end_time" class="ht-form__input" required />
+                        </div>
+                    </div>
+                </fieldset>
+
+                <fieldset class="ht-form__fieldset">
+                    <legend>Loại buổi & Học sinh</legend>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label">Loại buổi *</label>
+                        <div class="ht-form__radio-group">
+                            <label><input type="radio" name="type" value="riêng" checked /> Riêng (1-1)</label>
+                            <label><input type="radio" name="type" value="chung" /> Chung (nhóm)</label>
+                        </div>
+                    </div>
+                    <div class="ht-form__row" id="ht-sf-students-container">
+                        <label class="ht-form__label">Học sinh *</label>
+                        <p class="ht-form__note">Chọn lớp trước để xem danh sách học sinh.</p>
+                    </div>
+                </fieldset>
+
+                <fieldset class="ht-form__fieldset">
+                    <legend>Chi tiết</legend>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label" for="ht-sf-price">Học phí buổi</label>
+                        <input type="number" id="ht-sf-price" name="price" class="ht-form__input" min="0" step="1000" value="0" />
+                    </div>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label" for="ht-sf-name">Tên buổi học</label>
+                        <input type="text" id="ht-sf-name" name="session_name" class="ht-form__input" placeholder="(Tuỳ chọn)" />
+                    </div>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label">Màu hiển thị</label>
+                        <div class="ht-form__inline-group">
+                            <label class="ht-form__checkbox-inline">
+                                <input type="checkbox" id="ht-sf-color-toggle" /> Dùng màu riêng
+                            </label>
+                            <input type="color" id="ht-sf-color" name="display_color"
+                                   class="ht-form__input ht-form__input--color" value="#4A90D9" disabled />
+                        </div>
+                    </div>
+                </fieldset>
+            </form>
+        `;
+    },
+
+    /**
+     * Khi chọn lớp → load danh sách học sinh + prefill giá.
+     *
+     * @param {string} classId
+     */
+    async _onClassChange( classId ) {
+        const container = document.getElementById( 'ht-sf-students-container' );
+        if ( ! container ) return;
+
+        if ( ! classId ) {
+            container.innerHTML = `
+                <label class="ht-form__label">Học sinh *</label>
+                <p class="ht-form__note">Chọn lớp trước để xem danh sách học sinh.</p>
+            `;
+            return;
+        }
+
+        container.innerHTML = `
+            <label class="ht-form__label">Học sinh *</label>
+            <p class="ht-form__note">Đang tải...</p>
+        `;
+
+        try {
+            const data = await HT.api.call( 'hinteach_class_get', { class_id: classId }, 'GET' );
+            const students  = data.students || [];
+            const classData = data.class;
+
+            // Prefill giá từ class.fee_amount
+            const priceInput = document.getElementById( 'ht-sf-price' );
+            if ( priceInput && classData && classData.fee_amount ) {
+                priceInput.value = classData.fee_amount;
+            }
+
+            this._renderStudentsList( students );
+        } catch ( err ) {
+            container.innerHTML = `
+                <label class="ht-form__label">Học sinh *</label>
+                <p class="ht-form__note">Lỗi tải danh sách: ${HT.utils.escapeHtml( err.message )}</p>
+            `;
+        }
+    },
+
+    /**
+     * Render danh sách học sinh (checkboxes) trong form.
+     *
+     * @param {Array} students
+     */
+    _renderStudentsList( students ) {
+        const container = document.getElementById( 'ht-sf-students-container' );
+        if ( ! container ) return;
+
+        if ( ! students.length ) {
+            container.innerHTML = `
+                <label class="ht-form__label">Học sinh *</label>
+                <p class="ht-form__note">Lớp này chưa có học sinh nào.</p>
+            `;
+            return;
+        }
+
+        const type = document.querySelector( 'input[name="type"]:checked' )?.value || 'riêng';
+        const hint = type === 'riêng' ? '(chọn 1)' : '(chọn ít nhất 2)';
+
+        container.innerHTML = `
+            <label class="ht-form__label">Học sinh * ${hint}</label>
+            <div class="ht-multi-select" id="ht-sf-students">
+                ${students.map( s => `
+                    <label class="ht-multi-select__item">
+                        <input type="checkbox" name="student_ids" value="${s.id}" />
+                        <span>${HT.utils.escapeHtml( s.name )}</span>
+                    </label>
+                ` ).join( '' )}
+            </div>
+        `;
+    },
+
+    /** Cập nhật label học sinh khi đổi type riêng/chung. */
+    _onTypeChange() {
+        const studentsDiv = document.getElementById( 'ht-sf-students' );
+        if ( ! studentsDiv ) return;
+
+        const type  = document.querySelector( 'input[name="type"]:checked' )?.value || 'riêng';
+        const hint  = type === 'riêng' ? '(chọn 1)' : '(chọn ít nhất 2)';
+        const label = studentsDiv.closest( '.ht-form__row' )?.querySelector( '.ht-form__label' );
+        if ( label ) {
+            label.textContent = `Học sinh * ${hint}`;
+        }
+    },
+
+    /**
+     * Submit form tạo buổi học.
+     * Client-side validate → gọi API → xử lý conflict 409 / success.
+     */
+    async _saveSession() {
+        const form = document.getElementById( 'ht-session-form' );
+        if ( ! form ) return;
+
+        // Collect
+        const classId   = form.querySelector( '[name="class_id"]' )?.value || '';
+        const date      = form.querySelector( '[name="date"]' )?.value || '';
+        const startTime = form.querySelector( '[name="start_time"]' )?.value || '';
+        const endTime   = form.querySelector( '[name="end_time"]' )?.value || '';
+        const type      = form.querySelector( 'input[name="type"]:checked' )?.value || '';
+        const price     = form.querySelector( '[name="price"]' )?.value || '0';
+        const sessName  = form.querySelector( '[name="session_name"]' )?.value || '';
+
+        // Color — chỉ gửi nếu checkbox bật
+        const colorToggle  = document.getElementById( 'ht-sf-color-toggle' );
+        const displayColor = colorToggle?.checked
+            ? ( form.querySelector( '[name="display_color"]' )?.value || '' )
+            : '';
+
+        // Student IDs
+        const studentCheckboxes = form.querySelectorAll( 'input[name="student_ids"]:checked' );
+        const studentIds = Array.from( studentCheckboxes ).map( cb => cb.value );
+
+        // ── Client-side validate ───────────────────────────
+        if ( ! classId ) { HT.utils.toast( 'Vui lòng chọn lớp.', 'error' ); return; }
+        if ( ! date )    { HT.utils.toast( 'Vui lòng chọn ngày.', 'error' ); return; }
+        if ( ! startTime || ! endTime ) {
+            HT.utils.toast( 'Vui lòng nhập giờ bắt đầu và kết thúc.', 'error' ); return;
+        }
+        if ( startTime >= endTime ) {
+            HT.utils.toast( 'Giờ bắt đầu phải trước giờ kết thúc.', 'error' ); return;
+        }
+        if ( ! type ) { HT.utils.toast( 'Vui lòng chọn loại buổi.', 'error' ); return; }
+        if ( type === 'riêng' && studentIds.length !== 1 ) {
+            HT.utils.toast( 'Buổi riêng phải chọn đúng 1 học sinh.', 'error' ); return;
+        }
+        if ( type === 'chung' && studentIds.length < 2 ) {
+            HT.utils.toast( 'Buổi chung phải chọn ít nhất 2 học sinh.', 'error' ); return;
+        }
+
+        // Payload
+        const payload = {
+            class_id:      classId,
+            date:          date,
+            start_time:    startTime,
+            end_time:      endTime,
+            type:          type,
+            student_ids:   studentIds,
+            price:         price,
+            session_name:  sessName,
+            display_color: displayColor,
+        };
+
+        try {
+            const saveBtn = document.getElementById( 'ht-session-form-save' );
+            if ( saveBtn ) { saveBtn.disabled = true; saveBtn.textContent = 'Đang tạo...'; }
+
+            await HT.api.call( 'hinteach_session_save', payload );
+            HT.modal.close();
+            HT.utils.toast( 'Đã tạo buổi học thành công.' );
+            await this._render(); // Refresh calendar
+        } catch ( err ) {
+            // Xử lý conflict 409 với structured payload
+            if ( err.status === 409 && err.serverData?.conflict ) {
+                const c = err.serverData.conflict;
+                const conflictName = c.session_name
+                    ? `"${HT.utils.escapeHtml( c.session_name )}"`
+                    : 'buổi học';
+                const conflictTime = `${this._fmtTime( c.start_time )} – ${this._fmtTime( c.end_time )}`;
+                HT.utils.toast(
+                    `Trùng lịch với ${conflictName} lúc ${conflictTime} ngày ${this._fmtShort( c.date )}.`,
+                    'error'
+                );
+            } else {
+                HT.utils.toast( err.message, 'error' );
+            }
+            const saveBtn = document.getElementById( 'ht-session-form-save' );
+            if ( saveBtn ) { saveBtn.disabled = false; saveBtn.textContent = 'Tạo buổi'; }
+        }
     },
 };
 
