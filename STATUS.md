@@ -1,6 +1,7 @@
 # Current Project Status
 
-> Cập nhật: 2026-08-28 — xác minh từ code/git thật, không phải từ tài liệu cũ.
+> Cập nhật: 2026-08-29 — xác minh từ code/git thật, không phải từ tài liệu cũ.
+
 > Source of truth thứ 2 (sau code + git log). Xem `CLAUDE.md` cho thứ tự ưu tiên.
 
 ---
@@ -61,8 +62,16 @@ Chưa test:
 
 ## GĐ3 — Schedule
 
-**Status: 🟡 M1 COMPLETED** (commit `792e117`, 2026-08-28)
-Phạm vi hoàn thành: **M1 — Calendar Shell + Session List (READ ONLY)**
+**Status: 🟡 M2 COMPLETED**
+
+Đã hoàn thành:
+
+- M1 — Calendar Shell + Session List (READ ONLY)
+- M2 — Create Single Session
+
+---
+
+### M1 — Calendar Shell + Session List (READ ONLY)
 
 Đã hoàn thành:
 
@@ -118,11 +127,74 @@ Commit:
 
 - `792e117` — feat: add read-only schedule calendar M1
 
-Còn lại:
+---
 
-- M2+ chưa triển khai:
+### M2 — Create Single Session
 
-  - create session
+**Status: ✅ COMPLETED** (commit `f625fa1`, 2026-08-29)
+
+Phạm vi hoàn thành:
+
+- Create single session
+- Type:
+  - `riêng`
+  - `chung`
+- Session ↔ student mapping
+- Validation
+- Conflict detection
+- Calendar refresh
+
+Đã triển khai:
+
+- `includes/ajax-schedule.php`
+  - thêm `hinteach_session_save`
+  - create-only handler
+  - validation class/date/time/type/student/price
+  - conflict scope `teacher_id`
+  - transaction insert `sessions` + `session_students`
+
+- `assets/dashboard-core.js`
+  - mở rộng `HT.api.call()`
+  - giữ `error.message`
+  - thêm structured error data
+
+- `assets/modules/schedule.js`
+  - modal tạo buổi
+  - chọn lớp
+  - load học sinh
+  - tạo session
+  - refresh calendar
+
+Verification:
+
+- ✅ Create riêng 1 học sinh
+- ✅ Create chung >=2 học sinh
+- ✅ Chặn chung 1 học sinh
+- ✅ Conflict cùng teacher
+- ✅ Khác teacher cùng giờ tạo được
+- ✅ Display color lưu đúng
+- ✅ Database mapping session/student đúng
+- ✅ `npm run build` pass
+
+History:
+
+- `docs/history/gd3-m2-create-session-completed.md`
+
+---
+
+### GĐ3 — Commits
+
+- `792e117` — feat: add read-only schedule calendar M1
+
+- `f625fa1` — feat: implement gd3 m2 create session
+
+- `6f17bd3` — docs: add gd3 m2 completion history
+
+---
+
+### GĐ3 — Còn lại
+
+- M3+ chưa triển khai:
 
   - recurrence
 
@@ -200,6 +272,8 @@ Không có bug tồn đọng đã xác định tại thời điểm này.
 
 ## Latest Important Changes
 
+- 2026-08-29: Hoàn thành GĐ3 M2 — Create Single Session. Commit `f625fa1`, history `6f17bd3`.
+
 - 2026-08-28: Hoàn thành GĐ3 M1 — Calendar Shell + Session List READ ONLY. Commit `792e117`.
 
 - 2026-08-27: Tái cấu trúc toàn bộ tài liệu Markdown (xem `docs/history/phase-1-2-completed.md`).
@@ -212,12 +286,15 @@ Không có bug tồn đọng đã xác định tại thời điểm này.
 
 ## Next Recommended Task
 
-1. Review migration upgrade flow trước production release.
+1. Tiếp tục hoàn thiện các hạng mục nền trước production release:
+   - Review migration upgrade flow.
 
-2. Bắt đầu GĐ3 M2:
+2. Bắt đầu GĐ3 M3:
 
-   - đọc lại `docs/specs/schedule.md`
+   - đọc lại recurrence specification
 
-   - lập PLAN cho create session
+   - phân tích HAR/bundle evidence cho repeat session
 
-   - không mở rộng recurrence nếu chưa được duyệt.
+   - lập PLAN recurrence trước khi code
+
+   - không mở rộng edit/delete nếu chưa được duyệt.
