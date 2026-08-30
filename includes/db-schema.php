@@ -249,6 +249,7 @@ function hinteach_create_tables() {
         score DECIMAL(5,2) DEFAULT NULL,
         scale DECIMAL(5,2) NOT NULL DEFAULT 10,
         type ENUM('homework','test','final') NOT NULL DEFAULT 'test',
+        score_type_label VARCHAR(100) DEFAULT NULL,
         date DATE DEFAULT NULL,
         note TEXT DEFAULT NULL,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -20,6 +20,7 @@ add_action( 'wp_ajax_hinteach_session_get', 'hinteach_ajax_session_get' );      
 add_action( 'wp_ajax_hinteach_session_save', 'hinteach_ajax_session_save' );
 add_action( 'wp_ajax_hinteach_session_save_recurring', 'hinteach_ajax_session_save_recurring' );
 add_action( 'wp_ajax_hinteach_session_delete', 'hinteach_ajax_session_delete' ); // M4
+add_action( 'wp_ajax_hinteach_session_quick_entry', 'hinteach_ajax_session_quick_entry' ); // M5
 
 // ──────────────────────────────────────────────────────────────
 // Helpers chung cho file này
@@ -215,6 +216,34 @@ function hinteach_ajax_session_get() {
         $session_id
     ) );
 
+    // Load grades của buổi học (M5)
+    $g_table = $wpdb->prefix . 'hinteach_grades';
+    $grades  = $wpdb->get_results( $wpdb->prepare(
+        "SELECT id, student_id, test_name, score, scale, type, score_type_label, date, note
+         FROM {$g_table}
+         WHERE session_id = %d AND deleted_at IS NULL
+         ORDER BY id ASC",
+        $session_id
+    ) );
+
+    // Format grades data
+    $formatted_grades = array();
+    if ( ! empty( $grades ) ) {
+        foreach ( $grades as $g ) {
+            $formatted_grades[] = array(
+                'id'               => (int) $g->id,
+                'student_id'       => (int) $g->student_id,
+                'test_name'        => $g->test_name,
+                'score'            => null !== $g->score ? (float) $g->score : null,
+                'scale'            => (float) $g->scale,
+                'type'             => $g->type,
+                'score_type_label' => $g->score_type_label,
+                'date'             => $g->date,
+                'note'             => $g->note,
+            );
+        }
+    }
+
     // Tính following_count — số buổi SAU buổi này trong cùng repeat_group_id
     // Dùng predicate đã chốt: (repeat_group_id, date, start_time, id) — schedule.md Mục 4
     $following_count = 0;
@@ -254,6 +283,7 @@ function hinteach_ajax_session_get() {
             'repeat_group_id'  => $session->repeat_group_id ? (int) $session->repeat_group_id : null,
             'is_exception'     => (int) $session->is_exception,
             'students'         => $students ?: array(),
+            'grades'           => $formatted_grades,
             'following_count'  => $following_count,
         ),
     ) );
@@ -1377,5 +1407,393 @@ function hinteach_ajax_session_delete() {
         'deleted_count' => (int) $deleted_count,
         'scope'         => 'following',
         'message'       => 'Đã xoá ' . (int) $deleted_count . ' buổi trong chuỗi lặp.',
+    ) );
+}
+
+// ──────────────────────────────────────────────────────────────
+// Handler: Quick Entry — Nhật ký + Điểm buổi học (POST) — M5
+//
+// [D1 APPROVED]  Action riêng, không gộp vào hinteach_session_save.
+// [D2 APPROVED]  Ghi grades trực tiếp từ ajax-schedule.php.
+// [D3 APPROVED]  Option B: giữ type ENUM + thêm score_type_label.
+// [D4 APPROVED]  Không thêm test_group_id.
+// [D5 APPROVED]  Response trả created_scores[].
+// [D6 APPROVED]  Entry null score_value → không tạo record.
+// [D7 APPROVED]  Không thay đổi feeAmount/paid.
+//
+// KHÔNG propagate sang recurrence following — luôn single-session.
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * Ghi nhanh nhật ký học tập + điểm trong buổi học.
+ *
+ * Input (POST):
+ *   session_id        int       Bắt buộc
+ *   content           string    Optional — nội dung bài học
+ *   homework_content  string    Optional — bài tập về nhà
+ *   session_name      string    Optional — tên buổi học
+ *   general_comment   string    Optional — nhận xét chung
+ *   student_details   string    JSON — per-student journal
+ *   score_groups      string    JSON — nhóm điểm
+ *
+ * Response success:
+ *   { message, updated_students, created_scores: [{ id, student_id, test_name, score, scale, type, score_type_label, date }] }
+ *
+ * Response error:
+ *   400 — validate lỗi
+ *   403 — không có quyền
+ *   404 — session không tồn tại / đã xoá
+ */
+function hinteach_ajax_session_quick_entry() {
+    $access = hinteach_schedule_check_access();
+
+    // ── Validate session_id ──────────────────────────────────
+    $session_id = isset( $_POST['session_id'] ) ? absint( $_POST['session_id'] ) : 0;
+    if ( ! $session_id ) {
+        wp_send_json_error( array( 'message' => 'Thiếu session_id.' ), 400 );
+    }
+
+    global $wpdb;
+    $s_table  = $wpdb->prefix . 'hinteach_sessions';
+    $c_table  = $wpdb->prefix . 'hinteach_classes';
+    $ss_table = $wpdb->prefix . 'hinteach_session_students';
+    $g_table  = $wpdb->prefix . 'hinteach_grades';
+    $st_table = $wpdb->prefix . 'hinteach_students';
+
+    // ── Load session + ownership check ───────────────────────
+    $session = $wpdb->get_row( $wpdb->prepare(
+        "SELECT s.*, c.teacher_id, c.name AS class_name
+         FROM {$s_table} s
+         JOIN {$c_table} c ON s.class_id = c.id AND c.deleted_at IS NULL
+         WHERE s.id = %d AND s.deleted_at IS NULL",
+        $session_id
+    ) );
+
+    if ( ! $session ) {
+        wp_send_json_error( array( 'message' => 'Buổi học không tồn tại hoặc đã bị xoá.' ), 404 );
+    }
+
+    if ( ! current_user_can( 'manage_hinteach_all' ) && (int) $session->teacher_id !== $access['teacher_id'] ) {
+        wp_send_json_error( array( 'message' => 'Bạn không có quyền thao tác buổi học này.' ), 403 );
+    }
+
+    // ── Load valid student IDs cho session này ───────────────
+    $valid_student_ids = $wpdb->get_col( $wpdb->prepare(
+        "SELECT student_id FROM {$ss_table} WHERE session_id = %d AND deleted_at IS NULL",
+        $session_id
+    ) );
+    $valid_student_ids = array_map( 'intval', $valid_student_ids );
+
+    if ( empty( $valid_student_ids ) ) {
+        wp_send_json_error( array( 'message' => 'Buổi học không có học sinh nào.' ), 400 );
+    }
+
+    // ── Thu thập session-level fields ────────────────────────
+    $content          = isset( $_POST['content'] )          ? sanitize_textarea_field( wp_unslash( $_POST['content'] ) )          : null;
+    $homework_content = isset( $_POST['homework_content'] ) ? sanitize_textarea_field( wp_unslash( $_POST['homework_content'] ) ) : null;
+    $session_name     = isset( $_POST['session_name'] )     ? sanitize_text_field( wp_unslash( $_POST['session_name'] ) )         : null;
+    $general_comment  = isset( $_POST['general_comment'] )  ? sanitize_textarea_field( wp_unslash( $_POST['general_comment'] ) )  : null;
+
+    // ── Parse student_details JSON ───────────────────────────
+    $student_details_raw = isset( $_POST['student_details'] ) ? wp_unslash( $_POST['student_details'] ) : '';
+    $student_details     = array();
+
+    if ( ! empty( $student_details_raw ) ) {
+        if ( is_string( $student_details_raw ) ) {
+            $student_details = json_decode( $student_details_raw, true );
+            if ( json_last_error() !== JSON_ERROR_NONE ) {
+                wp_send_json_error( array( 'message' => 'student_details JSON không hợp lệ.' ), 400 );
+            }
+        } elseif ( is_array( $student_details_raw ) ) {
+            $student_details = $student_details_raw;
+        }
+    }
+
+    // ── Parse score_groups JSON ──────────────────────────────
+    $score_groups_raw = isset( $_POST['score_groups'] ) ? wp_unslash( $_POST['score_groups'] ) : '';
+    $score_groups     = array();
+
+    if ( ! empty( $score_groups_raw ) ) {
+        if ( is_string( $score_groups_raw ) ) {
+            $score_groups = json_decode( $score_groups_raw, true );
+            if ( json_last_error() !== JSON_ERROR_NONE ) {
+                wp_send_json_error( array( 'message' => 'score_groups JSON không hợp lệ.' ), 400 );
+            }
+        } elseif ( is_array( $score_groups_raw ) ) {
+            $score_groups = $score_groups_raw;
+        }
+    }
+
+    // ── Validate homework enum values ────────────────────────
+    $valid_homework = array( '', '0%', '30%', '50%', '70%', '100%' );
+
+    foreach ( $student_details as $sid => $detail ) {
+        $sid_int = absint( $sid );
+        if ( ! in_array( $sid_int, $valid_student_ids, true ) ) {
+            wp_send_json_error( array( 'message' => 'Học sinh ID ' . $sid_int . ' không thuộc buổi học này.' ), 400 );
+        }
+        if ( isset( $detail['homework'] ) && ! in_array( (string) $detail['homework'], $valid_homework, true ) ) {
+            wp_send_json_error( array(
+                'message' => 'Giá trị BTVN không hợp lệ cho học sinh ID ' . $sid_int . '. Chỉ chấp nhận: 0%, 30%, 50%, 70%, 100%.',
+            ), 400 );
+        }
+    }
+
+    // ── Validate score_groups ────────────────────────────────
+    // Pre-validate all groups BEFORE transaction to fail fast
+    $validated_groups = array();
+
+    if ( is_array( $score_groups ) ) {
+        foreach ( $score_groups as $gi => $group ) {
+            if ( ! is_array( $group ) ) {
+                continue;
+            }
+
+            $score_type = isset( $group['score_type'] ) ? sanitize_text_field( $group['score_type'] ) : '';
+            $test_name  = isset( $group['test_name'] )  ? sanitize_text_field( $group['test_name'] )  : '';
+            $max_score  = isset( $group['max_score'] )   ? floatval( $group['max_score'] )             : 0;
+            $entries    = isset( $group['entries'] ) && is_array( $group['entries'] ) ? $group['entries'] : array();
+
+            // Filter entries: only those with valid score_value (D6)
+            $valid_entries = array();
+            foreach ( $entries as $entry ) {
+                if ( ! is_array( $entry ) ) {
+                    continue;
+                }
+                // score_value null/empty → skip (D6 APPROVED)
+                if ( ! isset( $entry['score_value'] ) || $entry['score_value'] === '' || $entry['score_value'] === null ) {
+                    continue;
+                }
+
+                $entry_sid   = isset( $entry['student_id'] ) ? absint( $entry['student_id'] ) : 0;
+                $score_value = floatval( $entry['score_value'] );
+                $score_note  = isset( $entry['score_note'] ) ? sanitize_text_field( $entry['score_note'] ) : '';
+
+                // Validate student belongs to session
+                if ( ! in_array( $entry_sid, $valid_student_ids, true ) ) {
+                    wp_send_json_error( array(
+                        'message' => 'Học sinh ID ' . $entry_sid . ' trong nhóm điểm không thuộc buổi học này.',
+                    ), 400 );
+                }
+
+                $valid_entries[] = array(
+                    'student_id'  => $entry_sid,
+                    'score_value' => $score_value,
+                    'score_note'  => mb_substr( $score_note, 0, 500 ),
+                );
+            }
+
+            // Skip groups with zero valid entries
+            if ( empty( $valid_entries ) ) {
+                continue;
+            }
+
+            // test_name required if group has valid entries
+            if ( empty( $test_name ) ) {
+                wp_send_json_error( array(
+                    'message' => 'Nhóm điểm #' . ( $gi + 1 ) . ' có điểm nhưng thiếu tên bài kiểm tra.',
+                ), 400 );
+            }
+
+            // max_score validation
+            if ( $max_score <= 0 ) {
+                wp_send_json_error( array(
+                    'message' => 'Thang điểm tối đa phải lớn hơn 0 (nhóm "' . $test_name . '").',
+                ), 400 );
+            }
+            if ( $max_score > 1000 ) {
+                wp_send_json_error( array(
+                    'message' => 'Thang điểm tối đa không được vượt quá 1000 (nhóm "' . $test_name . '").',
+                ), 400 );
+            }
+
+            // score_type_label length check
+            if ( mb_strlen( $score_type ) > 100 ) {
+                wp_send_json_error( array(
+                    'message' => 'Loại điểm không được vượt quá 100 ký tự (nhóm "' . $test_name . '").',
+                ), 400 );
+            }
+
+            // test_name length check
+            if ( mb_strlen( $test_name ) > 255 ) {
+                wp_send_json_error( array(
+                    'message' => 'Tên bài kiểm tra không được vượt quá 255 ký tự.',
+                ), 400 );
+            }
+
+            // Validate each score_value in range [0, max_score]
+            foreach ( $valid_entries as $ve ) {
+                if ( $ve['score_value'] < 0 || $ve['score_value'] > $max_score ) {
+                    wp_send_json_error( array(
+                        'message' => 'Điểm số phải nằm trong khoảng 0 – ' . $max_score . ' (học sinh ID ' . $ve['student_id'] . ', nhóm "' . $test_name . '").',
+                    ), 400 );
+                }
+            }
+
+            // D3 Option B: map scoreType → type ENUM + score_type_label
+            $type_enum       = 'test'; // default
+            $score_type_lower = mb_strtolower( $score_type );
+
+            if ( in_array( $score_type_lower, array( 'homework', 'btvn', 'bài tập về nhà', 'bài tập' ), true ) ) {
+                $type_enum = 'homework';
+            } elseif ( in_array( $score_type_lower, array( 'final', 'cuối kỳ', 'cuoi ky', 'thi cuối kỳ' ), true ) ) {
+                $type_enum = 'final';
+            }
+            // Everything else stays 'test' (default)
+
+            $validated_groups[] = array(
+                'score_type'       => $score_type,      // original label for score_type_label
+                'type_enum'        => $type_enum,        // mapped ENUM value
+                'test_name'        => mb_substr( $test_name, 0, 255 ),
+                'max_score'        => $max_score,
+                'entries'          => $valid_entries,
+            );
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // TRANSACTION — all-or-nothing
+    // ══════════════════════════════════════════════════════════
+
+    $now = current_time( 'mysql' );
+    $wpdb->query( 'START TRANSACTION' );
+
+    // ── Step 3: Update session-level fields ───────────────────
+    $session_update = array( 'updated_at' => $now );
+    $session_format = array( '%s' );
+
+    // Chỉ update field nếu client thực sự gửi key đó trong POST
+    // (null = không gửi key → không update; '' = gửi rỗng → update thành rỗng/NULL)
+    if ( array_key_exists( 'content', $_POST ) ) {
+        $session_update['content'] = ! empty( $content ) ? $content : null;
+        $session_format[]          = '%s';
+    }
+    if ( array_key_exists( 'homework_content', $_POST ) ) {
+        $session_update['homework_content'] = ! empty( $homework_content ) ? $homework_content : null;
+        $session_format[]                   = '%s';
+    }
+    if ( array_key_exists( 'session_name', $_POST ) ) {
+        $session_update['session_name'] = ! empty( $session_name ) ? $session_name : null;
+        $session_format[]               = '%s';
+    }
+    if ( array_key_exists( 'general_comment', $_POST ) ) {
+        $session_update['general_comment'] = ! empty( $general_comment ) ? $general_comment : null;
+        $session_format[]                  = '%s';
+    }
+
+    // Chỉ thực hiện UPDATE nếu có ít nhất 1 field ngoài updated_at
+    if ( count( $session_update ) > 1 ) {
+        $ok = $wpdb->update( $s_table, $session_update, array( 'id' => $session_id ), $session_format, array( '%d' ) );
+        if ( false === $ok ) {
+            $wpdb->query( 'ROLLBACK' );
+            wp_send_json_error( array( 'message' => 'Không thể cập nhật nội dung buổi học. Vui lòng thử lại.' ), 500 );
+        }
+    }
+
+    // ── Step 4: Update session_students journal fields ────────
+    // [D7 APPROVED] KHÔNG update fee_amount/paid
+    $updated_students = 0;
+
+    foreach ( $student_details as $sid => $detail ) {
+        $sid_int = absint( $sid );
+        if ( ! in_array( $sid_int, $valid_student_ids, true ) ) {
+            continue; // đã validate ở trên, nhưng double-safe
+        }
+
+        $ss_update = array( 'updated_at' => $now );
+        $ss_format = array( '%s' );
+
+        if ( isset( $detail['homework'] ) ) {
+            $hw = (string) $detail['homework'];
+            $ss_update['homework'] = ! empty( $hw ) ? $hw : null;
+            $ss_format[]           = '%s';
+        }
+        if ( isset( $detail['attitude'] ) ) {
+            $att = sanitize_textarea_field( $detail['attitude'] );
+            $ss_update['attitude'] = ! empty( $att ) ? $att : null;
+            $ss_format[]           = '%s';
+        }
+        if ( isset( $detail['individual_comment'] ) ) {
+            $ic = sanitize_textarea_field( $detail['individual_comment'] );
+            $ss_update['individual_comment'] = ! empty( $ic ) ? $ic : null;
+            $ss_format[]                     = '%s';
+        }
+        if ( isset( $detail['note'] ) ) {
+            $nt = sanitize_textarea_field( $detail['note'] );
+            $ss_update['note'] = ! empty( $nt ) ? $nt : null;
+            $ss_format[]       = '%s';
+        }
+
+        // Chỉ update nếu có field thay đổi ngoài updated_at
+        if ( count( $ss_update ) > 1 ) {
+            $ok = $wpdb->update(
+                $ss_table,
+                $ss_update,
+                array( 'session_id' => $session_id, 'student_id' => $sid_int, 'deleted_at' => null ),
+                $ss_format,
+                array( '%d', '%d' )
+            );
+            if ( false === $ok ) {
+                $wpdb->query( 'ROLLBACK' );
+                wp_send_json_error( array( 'message' => 'Không thể cập nhật nhật ký học sinh ID ' . $sid_int . '. Vui lòng thử lại.' ), 500 );
+            }
+            $updated_students++;
+        }
+    }
+
+    // ── Step 5: Insert grade records ─────────────────────────
+    $created_scores = array();
+
+    foreach ( $validated_groups as $group ) {
+        foreach ( $group['entries'] as $entry ) {
+            $grade_data = array(
+                'student_id'       => $entry['student_id'],
+                'class_id'         => (int) $session->class_id,
+                'session_id'       => $session_id,
+                'test_name'        => $group['test_name'],
+                'score'            => $entry['score_value'],
+                'scale'            => $group['max_score'],
+                'type'             => $group['type_enum'],
+                'score_type_label' => ! empty( $group['score_type'] ) ? $group['score_type'] : null,
+                'date'             => $session->date,     // server auto-assigns from session
+                'note'             => ! empty( $entry['score_note'] ) ? $entry['score_note'] : null,
+                'created_at'       => $now,
+                'updated_at'       => $now,
+            );
+            $grade_format = array( '%d', '%d', '%d', '%s', '%f', '%f', '%s', '%s', '%s', '%s', '%s', '%s' );
+
+            $g_ok = $wpdb->insert( $g_table, $grade_data, $grade_format );
+            if ( false === $g_ok ) {
+    $wpdb->query( 'ROLLBACK' );
+
+   wp_send_json_error(
+ array(
+   'message' => 'Không thể lưu điểm cho học sinh ID ...'
+ ),
+ 500
+);
+}
+
+            $created_scores[] = array(
+                'id'               => $wpdb->insert_id,
+                'student_id'       => $entry['student_id'],
+                'test_name'        => $group['test_name'],
+                'score'            => $entry['score_value'],
+                'scale'            => $group['max_score'],
+                'type'             => $group['type_enum'],
+                'score_type_label' => $group['score_type'],
+                'date'             => $session->date,
+            );
+        }
+    }
+
+    // ── Step 6: COMMIT ───────────────────────────────────────
+    $wpdb->query( 'COMMIT' );
+
+    // ── Step 7: Response (D5 APPROVED — trả created_scores) ──
+    wp_send_json_success( array(
+        'message'          => 'Đã lưu nhật ký và điểm buổi học thành công.',
+        'updated_students' => $updated_students,
+        'created_scores'   => $created_scores,
     ) );
 }

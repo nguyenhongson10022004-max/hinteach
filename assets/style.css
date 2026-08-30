@@ -997,3 +997,155 @@ body.ht-modal-open {
     margin-top: 2px;
 }
 
+/* ══════════════════════════════════════════════════════════
+   M5: Quick Entry — Journal & Score
+   ══════════════════════════════════════════════════════════ */
+
+.ht-journal-card {
+    border: 1px solid var(--ht-border);
+    border-radius: var(--ht-radius);
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    background: #fafbfc;
+}
+
+.ht-journal-card:last-child {
+    margin-bottom: 0;
+}
+
+.ht-journal-card__name {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--ht-text);
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--ht-border);
+}
+
+.ht-journal-card__grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.ht-journal-card__grid .ht-form__row {
+    margin-bottom: 0;
+}
+
+/* Score group */
+
+.ht-score-group {
+    border: 1px solid var(--ht-border);
+    border-radius: var(--ht-radius);
+    padding: 14px;
+    margin-bottom: 12px;
+    background: #fafbfc;
+    position: relative;
+}
+
+.ht-score-group:last-of-type {
+    margin-bottom: 0;
+}
+
+.ht-score-group__header {
+    display: grid;
+    grid-template-columns: 1fr 1fr 100px;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.ht-score-group__remove {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: none;
+    border: none;
+    color: var(--ht-danger, #dc2626);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: var(--ht-radius-sm);
+    transition: background var(--ht-transition);
+}
+
+.ht-score-group__remove:hover {
+    background: #fef2f2;
+}
+
+.ht-score-group__entries {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.ht-score-group__entries th {
+    text-align: left;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ht-text-muted);
+    padding: 4px 8px 6px 0;
+    border-bottom: 1px solid var(--ht-border);
+}
+
+.ht-score-group__entries td {
+    padding: 6px 8px 6px 0;
+    vertical-align: middle;
+}
+
+.ht-score-group__entries td:first-child {
+    font-size: 13px;
+    font-weight: 500;
+    min-width: 100px;
+}
+
+.ht-score-group__entries .ht-form__input {
+    padding: 4px 8px;
+    font-size: 13px;
+}
+
+.ht-score-group__entries input[type="number"] {
+    width: 80px;
+}
+
+.ht-score-group__entries input[type="text"] {
+    width: 100%;
+    min-width: 120px;
+}
+
+.ht-score-add-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 14px;
+    border: 1px dashed var(--ht-border);
+    border-radius: var(--ht-radius-sm);
+    background: none;
+    color: var(--ht-primary);
+    cursor: pointer;
+    font-size: 13px;
+    font-family: var(--ht-font);
+    transition: all var(--ht-transition);
+    margin-top: 8px;
+}
+
+.ht-score-add-btn:hover {
+    border-color: var(--ht-primary);
+    background: #f0f7ff;
+}
+
+/* Inline group for form footer buttons */
+
+.ht-form__inline-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.ht-form__checkbox-inline {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+

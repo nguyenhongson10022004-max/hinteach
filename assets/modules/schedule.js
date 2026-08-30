@@ -908,6 +908,7 @@ const ScheduleModule = {
                 footer: `
                     <button type="button" class="ht-btn ht-btn--danger ht-btn--ghost" id="ht-session-form-delete" style="margin-right:auto;">Xoá buổi</button>
                     <button type="button" class="ht-btn ht-btn--secondary" id="ht-session-form-cancel">Huỷ</button>
+                    <button type="button" class="ht-btn ht-btn--primary" id="ht-session-form-quick-entry" style="background:var(--ht-success,#16a34a);">Lưu nhật ký</button>
                     <button type="button" class="ht-btn ht-btn--primary" id="ht-session-form-update">Lưu thay đổi</button>
                 `,
             } );
@@ -919,6 +920,8 @@ const ScheduleModule = {
                 ?.addEventListener( 'click', () => this._updateSession( session ) );
             document.getElementById( 'ht-session-form-delete' )
                 ?.addEventListener( 'click', () => this._deleteSession( session ) );
+            document.getElementById( 'ht-session-form-quick-entry' )
+                ?.addEventListener( 'click', () => this._saveQuickEntry( session ) );
             document.getElementById( 'ht-sf-class' )
                 ?.addEventListener( 'change', ( e ) => this._onClassChange( e.target.value ) );
             document.querySelectorAll( 'input[name="type"]' ).forEach( r => {
@@ -929,6 +932,36 @@ const ScheduleModule = {
                     const colorInput = document.getElementById( 'ht-sf-color' );
                     if ( colorInput ) colorInput.disabled = ! e.target.checked;
                 } );
+
+            // M5: Bind score group add button + initialize score group counter
+            this._scoreGroupCounter = 0;
+            document.getElementById( 'ht-score-add-group' )
+                ?.addEventListener( 'click', () => this._addScoreGroup( session ) );
+
+            // M5: Render existing score groups if session.grades exists
+            if ( session.grades && session.grades.length ) {
+                const existingGroupsMap = new Map();
+                session.grades.forEach( g => {
+                    const scoreType = g.score_type_label || ( g.type === 'homework' ? 'BTVN' : ( g.type === 'final' ? 'Cuối kỳ' : '' ) );
+                    const key = `${g.test_name}___${g.scale}___${scoreType}`;
+                    if ( ! existingGroupsMap.has( key ) ) {
+                        existingGroupsMap.set( key, {
+                            score_type: scoreType,
+                            test_name:  g.test_name,
+                            max_score:  parseFloat( g.scale ) || 10,
+                            entries:    {},
+                        } );
+                    }
+                    existingGroupsMap.get( key ).entries[ parseInt( g.student_id, 10 ) ] = {
+                        score_value: g.score !== null && g.score !== undefined ? parseFloat( g.score ) : null,
+                        score_note:  g.note || '',
+                    };
+                } );
+
+                existingGroupsMap.forEach( groupData => {
+                    this._addScoreGroup( session, groupData );
+                } );
+            }
         } catch ( err ) {
             HT.utils.toast( 'Không thể tải thông tin buổi học: ' + err.message, 'error' );
         }
@@ -1049,8 +1082,286 @@ const ScheduleModule = {
                         </div>
                     </div>
                 </fieldset>
+
+                ${this._buildJournalFieldsetHtml( session )}
+
+                <fieldset class="ht-form__fieldset">
+                    <legend>Điểm buổi học</legend>
+                    <div id="ht-score-groups-container"></div>
+                    <button type="button" class="ht-score-add-btn" id="ht-score-add-group">+ Thêm nhóm điểm</button>
+                </fieldset>
             </form>
         `;
+    },
+
+    // ──────────────────────────────────────────────────────────
+    // M5: Quick Entry — Journal & Score Methods
+    // ──────────────────────────────────────────────────────────
+
+    /**
+     * Build fieldset HTML nhật ký học tập per-student.
+     *
+     * @param {Object} session — session data from hinteach_session_get
+     * @returns {string} HTML string
+     */
+    _buildJournalFieldsetHtml( session ) {
+        const students = session.students || [];
+        if ( ! students.length ) return '';
+
+        const homeworkOptions = [ '', '0%', '30%', '50%', '70%', '100%' ];
+
+        const cards = students.map( s => {
+            const sid  = s.student_id;
+            const name = HT.utils.escapeHtml( s.name || `Học sinh #${sid}` );
+
+            const hwValue  = s.homework || '';
+            const attValue = HT.utils.escapeHtml( s.attitude || '' );
+            const icValue  = HT.utils.escapeHtml( s.individual_comment || '' );
+            const ntValue  = HT.utils.escapeHtml( s.note || '' );
+
+            const hwOptions = homeworkOptions.map( v => {
+                const label = v === '' ? '-- Chọn --' : v;
+                return `<option value="${v}" ${v === hwValue ? 'selected' : ''}>${label}</option>`;
+            } ).join( '' );
+
+            return `
+                <div class="ht-journal-card" data-student-id="${sid}">
+                    <div class="ht-journal-card__name">${name}</div>
+                    <div class="ht-journal-card__grid">
+                        <div class="ht-form__row">
+                            <label class="ht-form__label">BTVN</label>
+                            <select class="ht-form__select ht-qe-homework" data-sid="${sid}">
+                                ${hwOptions}
+                            </select>
+                        </div>
+                        <div class="ht-form__row">
+                            <label class="ht-form__label">Thái độ</label>
+                            <input type="text" class="ht-form__input ht-qe-attitude" data-sid="${sid}" value="${attValue}" placeholder="(Tuỳ chọn)" />
+                        </div>
+                        <div class="ht-form__row">
+                            <label class="ht-form__label">Nhận xét riêng</label>
+                            <textarea class="ht-form__textarea ht-qe-comment" data-sid="${sid}" rows="2" placeholder="(Tuỳ chọn)">${icValue}</textarea>
+                        </div>
+                        <div class="ht-form__row">
+                            <label class="ht-form__label">Ghi chú</label>
+                            <textarea class="ht-form__textarea ht-qe-note" data-sid="${sid}" rows="2" placeholder="(Tuỳ chọn)">${ntValue}</textarea>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } ).join( '' );
+
+        return `
+            <fieldset class="ht-form__fieldset">
+                <legend>Nhật ký học tập</legend>
+                ${cards}
+            </fieldset>
+        `;
+    },
+
+    /**
+     * Build 1 score group HTML.
+     *
+     * @param {Object} session — session data
+     * @param {number} groupIndex — unique index
+     * @param {Object|null} initialData — optional existing group data { score_type, test_name, max_score, entries }
+     * @returns {string} HTML string
+     */
+    _buildScoreGroupHtml( session, groupIndex, initialData = null ) {
+        const students = session.students || [];
+        const gid = `ht-sg-${groupIndex}`;
+
+        const initScoreType = initialData ? HT.utils.escapeHtml( initialData.score_type || '' ) : '';
+        const initTestName  = initialData ? HT.utils.escapeHtml( initialData.test_name || '' ) : '';
+        const initMaxScore  = initialData ? ( initialData.max_score || 10 ) : 10;
+        const initEntries   = initialData?.entries || {};
+
+        const studentRows = students.map( s => {
+            const sid  = s.student_id;
+            const name = HT.utils.escapeHtml( s.name || `#${sid}` );
+            const entry = initEntries[ sid ] || null;
+            const scoreVal = entry && entry.score_value !== null && entry.score_value !== undefined ? entry.score_value : '';
+            const scoreNote = entry ? HT.utils.escapeHtml( entry.score_note || '' ) : '';
+
+            return `
+                <tr>
+                    <td>${name}</td>
+                    <td><input type="number" class="ht-form__input" data-field="score_value" data-sid="${sid}" min="0" step="0.5" placeholder="—" value="${scoreVal}" /></td>
+                    <td><input type="text" class="ht-form__input" data-field="score_note" data-sid="${sid}" maxlength="500" placeholder="Ghi chú" value="${scoreNote}" /></td>
+                </tr>
+            `;
+        } ).join( '' );
+
+        return `
+            <div class="ht-score-group" data-group-index="${groupIndex}" id="${gid}">
+                <button type="button" class="ht-score-group__remove" data-remove-group="${gid}" title="Xoá nhóm">&times;</button>
+                <div class="ht-score-group__header">
+                    <div class="ht-form__row">
+                        <label class="ht-form__label">Loại điểm</label>
+                        <input type="text" class="ht-form__input" data-field="score_type" maxlength="100" placeholder="VD: BTVN, Kiểm tra…" value="${initScoreType}" />
+                    </div>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label">Tên bài *</label>
+                        <input type="text" class="ht-form__input" data-field="test_name" maxlength="255" placeholder="VD: Kiểm tra chương 3" required value="${initTestName}" />
+                    </div>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label">Thang điểm</label>
+                        <input type="number" class="ht-form__input" data-field="max_score" min="1" max="1000" value="${initMaxScore}" />
+                    </div>
+                </div>
+                <table class="ht-score-group__entries">
+                    <thead>
+                        <tr><th>Học sinh</th><th>Điểm</th><th>Ghi chú</th></tr>
+                    </thead>
+                    <tbody>${studentRows}</tbody>
+                </table>
+            </div>
+        `;
+    },
+
+    /**
+     * Thêm 1 nhóm điểm vào container.
+     *
+     * @param {Object} session
+     * @param {Object|null} initialData
+     */
+    _addScoreGroup( session, initialData = null ) {
+        const container = document.getElementById( 'ht-score-groups-container' );
+        if ( ! container ) return;
+
+        this._scoreGroupCounter = ( this._scoreGroupCounter || 0 ) + 1;
+        const html = this._buildScoreGroupHtml( session, this._scoreGroupCounter, initialData );
+        container.insertAdjacentHTML( 'beforeend', html );
+
+        // Bind remove
+        const groupEl = document.getElementById( `ht-sg-${this._scoreGroupCounter}` );
+        const removeBtn = groupEl?.querySelector( '.ht-score-group__remove' );
+        removeBtn?.addEventListener( 'click', () => groupEl.remove() );
+    },
+
+    /**
+     * Collect quick-entry payload từ modal.
+     *
+     * @returns {{ studentDetails: Object, scoreGroups: Array }}
+     */
+    _collectQuickEntryPayload() {
+        const form = document.getElementById( 'ht-session-form' );
+        if ( ! form ) {
+            return { content: '', homeworkContent: '', sessionName: '', generalComment: '', studentDetails: {}, scoreGroups: [] };
+        }
+
+        // Session-level (same fields already in edit form)
+        const content         = form.querySelector( '[name="content"]' )?.value ?? '';
+        const homeworkContent = form.querySelector( '[name="homework_content"]' )?.value ?? '';
+        const sessionName     = form.querySelector( '[name="session_name"]' )?.value ?? '';
+        const generalComment  = form.querySelector( '[name="general_comment"]' )?.value ?? '';
+
+        // Per-student journal (scoped to form)
+        const studentDetails = {};
+        form.querySelectorAll( '.ht-journal-card' ).forEach( card => {
+            const sid = card.dataset.studentId;
+            if ( ! sid ) return;
+            studentDetails[ sid ] = {
+                homework:           card.querySelector( '.ht-qe-homework' )?.value ?? '',
+                attitude:           card.querySelector( '.ht-qe-attitude' )?.value ?? '',
+                individual_comment: card.querySelector( '.ht-qe-comment' )?.value ?? '',
+                note:               card.querySelector( '.ht-qe-note' )?.value ?? '',
+            };
+        } );
+
+        // Score groups (scoped to form)
+        const scoreGroups = [];
+        form.querySelectorAll( '.ht-score-group' ).forEach( groupEl => {
+            const scoreType = groupEl.querySelector( '[data-field="score_type"]' )?.value ?? '';
+            const testName  = groupEl.querySelector( '[data-field="test_name"]' )?.value ?? '';
+            const maxScore  = parseFloat( groupEl.querySelector( '[data-field="max_score"]' )?.value ) || 0;
+
+            const entries = [];
+            groupEl.querySelectorAll( 'tbody tr' ).forEach( row => {
+                const scoreInput = row.querySelector( '[data-field="score_value"]' );
+                const noteInput  = row.querySelector( '[data-field="score_note"]' );
+                if ( ! scoreInput ) return;
+
+                const sid        = scoreInput.dataset.sid;
+                const scoreValue = scoreInput.value !== '' ? parseFloat( scoreInput.value ) : null;
+                const scoreNote  = noteInput?.value ?? '';
+
+                entries.push( {
+                    student_id:  parseInt( sid, 10 ),
+                    score_value: scoreValue,
+                    score_note:  scoreNote,
+                } );
+            } );
+
+            // Only include groups with at least 1 entry that has a score
+            const hasAnyScore = entries.some( e => e.score_value !== null );
+            if ( hasAnyScore ) {
+                scoreGroups.push( { score_type: scoreType, test_name: testName, max_score: maxScore, entries } );
+            }
+        } );
+
+        return { content, homeworkContent, sessionName, generalComment, studentDetails, scoreGroups };
+    },
+
+    /**
+     * Lưu nhật ký + điểm buổi học (quick-entry).
+     * Gọi action hinteach_session_quick_entry (M5).
+     * KHÔNG propagate sang recurrence — luôn single-session.
+     *
+     * @param {Object} currentSession
+     */
+    async _saveQuickEntry( currentSession ) {
+        const payload = this._collectQuickEntryPayload();
+
+        // Client-side validation
+        for ( const group of payload.scoreGroups ) {
+            if ( ! group.test_name.trim() ) {
+                HT.utils.toast( 'Vui lòng nhập tên bài kiểm tra cho tất cả nhóm điểm.', 'error' );
+                return;
+            }
+            if ( group.max_score <= 0 ) {
+                HT.utils.toast( 'Thang điểm tối đa phải lớn hơn 0.', 'error' );
+                return;
+            }
+            for ( const entry of group.entries ) {
+                if ( entry.score_value !== null && ( entry.score_value < 0 || entry.score_value > group.max_score ) ) {
+                    HT.utils.toast(
+                        `Điểm số phải nằm trong khoảng 0 – ${group.max_score}.`,
+                        'error'
+                    );
+                    return;
+                }
+            }
+        }
+
+        const apiPayload = {
+            session_id:       currentSession.id,
+            content:          payload.content,
+            homework_content: payload.homeworkContent,
+            session_name:     payload.sessionName,
+            general_comment:  payload.generalComment,
+            student_details:  JSON.stringify( payload.studentDetails ),
+            score_groups:     JSON.stringify( payload.scoreGroups ),
+        };
+
+        try {
+            const btn = document.getElementById( 'ht-session-form-quick-entry' );
+            if ( btn ) { btn.disabled = true; btn.textContent = 'Đang lưu...'; }
+
+            const result = await HT.api.call( 'hinteach_session_quick_entry', apiPayload );
+
+            let msg = result.message || 'Đã lưu nhật ký buổi học.';
+            if ( result.created_scores && result.created_scores.length ) {
+                msg += ` (${result.created_scores.length} điểm)`;
+            }
+            HT.utils.toast( msg );
+
+            if ( btn ) { btn.disabled = false; btn.textContent = 'Lưu nhật ký'; }
+        } catch ( err ) {
+            HT.utils.toast( err.message || 'Không thể lưu nhật ký.', 'error' );
+            const btn = document.getElementById( 'ht-session-form-quick-entry' );
+            if ( btn ) { btn.disabled = false; btn.textContent = 'Lưu nhật ký'; }
+        }
     },
 
     /**
