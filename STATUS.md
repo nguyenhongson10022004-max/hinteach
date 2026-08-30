@@ -1,6 +1,6 @@
 # Current Project Status
 
-> Cập nhật: 2026-08-29 — xác minh từ code/git thật, không phải từ tài liệu cũ.
+> Cập nhật: 2026-08-31 — xác minh từ code/git thật, không phải từ tài liệu cũ.
 
 > Source of truth thứ 2 (sau code + git log). Xem `CLAUDE.md` cho thứ tự ưu tiên.
 
@@ -62,12 +62,15 @@ Chưa test:
 
 ## GĐ3 — Schedule
 
-**Status: 🟡 M2 COMPLETED**
+**Status: 🟡 M5 COMPLETED**
 
 Đã hoàn thành:
 
-- M1 — Calendar Shell + Session List (READ ONLY)
-- M2 — Create Single Session
+- M1 — Calendar Shell + Session List (READ ONLY) ✅
+- M2 — Create Single Session ✅
+- M3 — Recurrence / Repeat Session ✅
+- M4 — Edit/Delete Recurrence ✅
+- M5 — Quick Entry / Session Record / Score ✅
 
 ---
 
@@ -182,6 +185,77 @@ History:
 
 ---
 
+### M5 — Quick Entry / Session Record / Score
+
+**Status: ✅ COMPLETED** (commit `40ce7cd`, 2026-08-31)
+
+Phạm vi hoàn thành:
+
+- Quick-entry session record
+- Student journal update
+- Score creation from session
+- Score reload in edit modal
+
+Đã triển khai:
+
+Backend:
+
+- `hinteach_session_quick_entry`
+- Update session-level record:
+  - content
+  - homework_content
+  - session_name
+  - general_comment
+
+- Update `wp_hinteach_session_students`:
+  - homework
+  - attitude
+  - individual_comment
+  - note
+
+- Insert `wp_hinteach_grades`:
+  - session_id
+  - student_id
+  - test_name
+  - score
+  - scale
+  - type
+  - score_type_label
+
+Frontend:
+
+- Edit modal mở rộng:
+  - Nhật ký học tập
+  - Điểm buổi học
+
+- Thêm:
+  - Lưu nhật ký
+  - score group rendering
+  - reload score khi mở lại modal
+
+Database:
+
+- `wp_hinteach_grades`
+  - sử dụng `session_id` để liên kết điểm với buổi học
+  - thêm `score_type_label` theo D3 Option B
+
+Verification:
+
+- ✅ Journal save/reload
+- ✅ BTVN score mapping
+- ✅ Custom score type mapping
+- ✅ Null score handling
+- ✅ Score zero handling
+- ✅ Score validation
+- ✅ Score reload after reopen modal
+- ✅ M4 regression edit/delete
+
+Commit:
+
+- `40ce7cd` — feat: implement gd3 m5 quick entry
+
+---
+
 ### GĐ3 — Commits
 
 - `792e117` — feat: add read-only schedule calendar M1
@@ -192,14 +266,17 @@ History:
 
 - `c018430` — feat: add recurring session creation
 
-- `<docs-commit>` — docs: record gd3 m3 recurrence completion
+- `fc0a5fa` — docs: record gd3 m3 recurrence completion
 
-- `<m4-backend-commit>` — feat: implement gd3 m4 edit/delete recurrence backend
+- `add476f` — feat: implement gd3 m4 edit/delete recurrence backend
 
-- `<m4-frontend-commit>` — feat: implement gd3 m4 edit/delete recurrence UI
+- `619f0e0` — feat: implement gd3 m4 edit/delete recurrence frontend
 
-- `<m4-docs-commit>` — docs: record gd3 m4 completion history
+- `3246b99` — docs: record gd3 m4 edit/delete recurrence completion
 
+- `40ce7cd` — feat: implement gd3 m5 quick entry
+
+- `16cd068` — docs: record gd3 m5 quick entry completion
 ---
 
 ### GĐ3 — Completed
@@ -212,14 +289,18 @@ History:
 
 - M4 — Edit/Delete Recurrence ✅
 
+- M5 — Quick Entry / Session Record / Score ✅
+
 ---
 
 ### GĐ3 — Còn lại
 
-- M5:
-  - quick-entry
+Chưa triển khai:
 
-  - journal/score
+- M6 — Calendar Actions
+- M7 — Calendar Interaction
+
+---
 
 ## GĐ4 — Tuition
 
@@ -289,6 +370,8 @@ Không có bug tồn đọng đã xác định tại thời điểm này.
 
 ## Latest Important Changes
 
+- 2026-08-31: Hoàn thành GĐ3 M5 — Quick Entry / Session Record / Score. Commit `40ce7cd`.
+
 - 2026-08-29: Hoàn thành GĐ3 M2 — Create Single Session. Commit `f625fa1`, history `6f17bd3`.
 
 - 2026-08-28: Hoàn thành GĐ3 M1 — Calendar Shell + Session List READ ONLY. Commit `792e117`.
@@ -303,15 +386,12 @@ Không có bug tồn đọng đã xác định tại thời điểm này.
 
 ## Next Recommended Task
 
-1. Tiếp tục hoàn thiện các hạng mục nền trước production release:
-   - Review migration upgrade flow.
+1. Hoàn tất đóng milestone GĐ3 M5:
+   - push commits lên origin
+   - tạo tag `gd3-m5-completed`
 
-2. Bắt đầu GĐ3 M3:
-
-   - đọc lại recurrence specification
-
-   - phân tích HAR/bundle evidence cho repeat session
-
-   - lập PLAN recurrence trước khi code
-
-   - không mở rộng edit/delete nếu chưa được duyệt.
+2. Chuẩn bị GĐ3 M6:
+   - đọc HAR Calendar Actions
+   - đọc bundle context menu
+   - lập Decision Log
+   - viết Implementation Plan trước khi code
