@@ -3,20 +3,20 @@
 Date:
 2026-08-30
 
-Commit:
+Implementation commit:
 c018430
 
-## Implemented
+## Completed
 
 - Recurring session creation
 - Daily recurrence
 - Weekly recurrence
-- Monthly nth-weekday recurrence
+- Monthly recurrence
 - Monthly fallback
 - Custom repeat dates
 - Repeat date chip editing
-- Batch session creation
-- Conflict all-or-nothing transaction
+- Batch create sessions
+- Conflict atomic transaction
 
 ## Architecture
 
@@ -27,16 +27,12 @@ c018430
 
 ## Database
 
-No migration.
-
-repeat_group_id:
-- existing column reused
-- base session id convention
+- No migration
+- Existing repeat_group_id reused
 
 ## Verification
 
 Passed:
-
 - M2 regression
 - Weekly
 - Daily
@@ -45,3 +41,10 @@ Passed:
 - Custom
 - Remove repeat date
 - Conflict atomicity
+
+## Decisions
+
+- repeat_group_id uses base session id convention
+- No RRULE
+- No recurrence_sequence
+- Limit: 366 total sessions

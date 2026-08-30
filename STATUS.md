@@ -190,19 +190,28 @@ History:
 
 - `6f17bd3` — docs: add gd3 m2 completion history
 
+- `c018430` — feat: add recurring session creation
+
+- `<docs-commit>` — docs: record gd3 m3 recurrence completion
+
+---
+
+### GĐ3 — Completed
+
+- M1 — Calendar Shell + Session List READ ONLY ✅
+- M2 — Create Single Session ✅
+- M3 — Recurrence / Repeat Session ✅
+
 ---
 
 ### GĐ3 — Còn lại
 
-- M3+ chưa triển khai:
+- M4:
+  - edit/delete recurrence
 
-  - recurrence
-
-  - edit/delete
-
+- M5:
   - quick-entry
-
----
+  - journal/score
 
 ## GĐ4 — Tuition
 
