@@ -31,7 +31,11 @@
 |---|---|---|---|
 | `hinteach_class_save` / `hinteach_class_delete` | ajax-classes.php | POST | `manage_hinteach_classes` |
 | `hinteach_student_save` / `hinteach_student_import` | ajax-students.php | POST | `manage_hinteach_classes` |
-| `hinteach_session_save` / `hinteach_session_delete` (+ scope: `this`/`this_and_future`) | ajax-schedule.php | POST | quyền `scheduler` (assistant) hoặc `manage_hinteach_classes` |
+| `hinteach_session_list` | ajax-schedule.php | GET | quyền `scheduler` (assistant) hoặc `manage_hinteach_classes` |
+| `hinteach_session_get` | ajax-schedule.php | GET | quyền `scheduler` (assistant) hoặc `manage_hinteach_classes` |
+| `hinteach_session_save` (create + update, scope: `single`/`following`) | ajax-schedule.php | POST | quyền `scheduler` (assistant) hoặc `manage_hinteach_classes` |
+| `hinteach_session_save_recurring` | ajax-schedule.php | POST | quyền `scheduler` (assistant) hoặc `manage_hinteach_classes` |
+| `hinteach_session_delete` (scope: `single`/`following`) | ajax-schedule.php | POST | quyền `scheduler` (assistant) hoặc `manage_hinteach_classes` |
 | `hinteach_tuition_get` | ajax-tuition.php | GET | quyền `tuition` (assistant) hoặc `manage_hinteach_classes` |
 | `hinteach_tuition_adjustment_save` | ajax-tuition.php | POST | `manage_hinteach_classes` |
 | `hinteach_billing_payment_confirm` | ajax-tuition.php | POST | `manage_hinteach_classes` — dùng riêng cho `course`/`monthly`, KHÔNG dùng chung hàm với xác nhận thu buổi `session` |
