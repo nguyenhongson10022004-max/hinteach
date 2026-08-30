@@ -16,8 +16,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 // Đăng ký AJAX actions
 add_action( 'wp_ajax_hinteach_session_list', 'hinteach_ajax_session_list' );
+add_action( 'wp_ajax_hinteach_session_get', 'hinteach_ajax_session_get' );       // M4
 add_action( 'wp_ajax_hinteach_session_save', 'hinteach_ajax_session_save' );
 add_action( 'wp_ajax_hinteach_session_save_recurring', 'hinteach_ajax_session_save_recurring' );
+add_action( 'wp_ajax_hinteach_session_delete', 'hinteach_ajax_session_delete' ); // M4
 
 // ──────────────────────────────────────────────────────────────
 // Helpers chung cho file này
@@ -152,15 +154,120 @@ function hinteach_ajax_session_list() {
 }
 
 // ──────────────────────────────────────────────────────────────
+// Handler: Chi tiết 1 buổi học (GET) — M4
+// [HINTEACH DESIGN DECISION — D2] Thêm action riêng để lấy đủ
+// field cho modal Sửa, giữ session_list nhẹ cho calendar.
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * Trả đầy đủ thông tin 1 buổi học theo id.
+ *
+ * Input (GET):
+ *   session_id  int  Bắt buộc
+ *
+ * Response: { session: { id, class_id, date, start_time, end_time, price,
+ *             type, session_name, content, homework_content, general_comment,
+ *             display_color, repeat_group_id, is_exception,
+ *             students: [ { student_id, name, fee_amount, paid, homework,
+ *                           attitude, individual_comment, note } ],
+ *             following_count: int } }
+ */
+function hinteach_ajax_session_get() {
+    $access = hinteach_schedule_check_access();
+
+    $session_id = isset( $_GET['session_id'] ) ? absint( $_GET['session_id'] ) : 0;
+    if ( ! $session_id ) {
+        wp_send_json_error( array( 'message' => 'Thiếu session_id.' ), 400 );
+    }
+
+    global $wpdb;
+    $s_table  = $wpdb->prefix . 'hinteach_sessions';
+    $c_table  = $wpdb->prefix . 'hinteach_classes';
+    $ss_table = $wpdb->prefix . 'hinteach_session_students';
+    $st_table = $wpdb->prefix . 'hinteach_students';
+
+    // Load session + class info
+    $session = $wpdb->get_row( $wpdb->prepare(
+        "SELECT s.*, c.teacher_id, c.name AS class_name, c.color AS class_color
+         FROM {$s_table} s
+         JOIN {$c_table} c ON s.class_id = c.id AND c.deleted_at IS NULL
+         WHERE s.id = %d AND s.deleted_at IS NULL",
+        $session_id
+    ) );
+
+    if ( ! $session ) {
+        wp_send_json_error( array( 'message' => 'Buổi học không tồn tại hoặc đã bị xoá.' ), 404 );
+    }
+
+    // Ownership check
+    if ( ! current_user_can( 'manage_hinteach_all' ) && (int) $session->teacher_id !== $access['teacher_id'] ) {
+        wp_send_json_error( array( 'message' => 'Bạn không có quyền xem buổi học này.' ), 403 );
+    }
+
+    // Load students trong buổi
+    $students = $wpdb->get_results( $wpdb->prepare(
+        "SELECT ss.student_id, st.name, ss.fee_amount, ss.paid,
+                ss.homework, ss.attitude, ss.individual_comment, ss.note
+         FROM {$ss_table} ss
+         JOIN {$st_table} st ON ss.student_id = st.id AND st.deleted_at IS NULL
+         WHERE ss.session_id = %d AND ss.deleted_at IS NULL
+         ORDER BY st.name ASC",
+        $session_id
+    ) );
+
+    // Tính following_count — số buổi SAU buổi này trong cùng repeat_group_id
+    // Dùng predicate đã chốt: (repeat_group_id, date, start_time, id) — schedule.md Mục 4
+    $following_count = 0;
+    if ( $session->repeat_group_id ) {
+        $following_count = (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(*) FROM {$s_table}
+             WHERE repeat_group_id = %d
+               AND deleted_at IS NULL
+               AND (
+                   date > %s
+                   OR (date = %s AND start_time > %s)
+                   OR (date = %s AND start_time = %s AND id > %d)
+               )",
+            (int) $session->repeat_group_id,
+            $session->date,
+            $session->date, $session->start_time,
+            $session->date, $session->start_time, $session_id
+        ) );
+    }
+
+    wp_send_json_success( array(
+        'session' => array(
+            'id'               => (int) $session->id,
+            'class_id'         => (int) $session->class_id,
+            'class_name'       => $session->class_name,
+            'class_color'      => $session->class_color,
+            'date'             => $session->date,
+            'start_time'       => $session->start_time,
+            'end_time'         => $session->end_time,
+            'price'            => (float) $session->price,
+            'type'             => $session->type,
+            'session_name'     => $session->session_name,
+            'content'          => $session->content,
+            'homework_content' => $session->homework_content,
+            'general_comment'  => $session->general_comment,
+            'display_color'    => $session->display_color,
+            'repeat_group_id'  => $session->repeat_group_id ? (int) $session->repeat_group_id : null,
+            'is_exception'     => (int) $session->is_exception,
+            'students'         => $students ?: array(),
+            'following_count'  => $following_count,
+        ),
+    ) );
+}
+
+// ──────────────────────────────────────────────────────────────
 // Handler: Tạo buổi học (POST) — M2
 // ──────────────────────────────────────────────────────────────
 
 /**
- * Tạo buổi học đơn lẻ.
+ * Tạo hoặc cập nhật buổi học.
  *
- * M2: hinteach_session_save — CHỈ xử lý CREATE (không có session_id trong payload).
- * Nhánh UPDATE (session_id có giá trị) CHƯA implement — để dành M4, hiện tại phải
- * wp_send_json_error nếu nhận được session_id, KHÔNG được âm thầm bỏ qua.
+ * M2: CREATE (không có session_id trong payload).
+ * M4: UPDATE (session_id có giá trị) — dispatch sang hinteach_ajax_session_update().
  *
  * Decision Log (tất cả APPROVED bởi owner, 2026-08-29):
  *   #1 — Conflict scope = teacher_id [HINTEACH DESIGN DECISION]
@@ -168,11 +275,16 @@ function hinteach_ajax_session_list() {
  *   #3 — type='chung' ≥ 2 học sinh [HINTEACH DESIGN DECISION]
  *   #4 — price = client gửi, backend validate >= 0 [HINTEACH DESIGN DECISION]
  *
- * Input (POST):
+ * Input (POST) CREATE:
  *   class_id, date, start_time, end_time, type, student_ids[],
  *   price, session_name, content, homework_content, general_comment, display_color
  *
- * Response success: { id: int, message: string }
+ * Input (POST) UPDATE (M4):
+ *   session_id, update_scope ('single'|'following'),
+ *   + tất cả field CREATE
+ *
+ * Response success CREATE: { id: int, message: string }
+ * Response success UPDATE: { id: int, updated_count: int, scope: string, message: string }
  * Response conflict 409: { message: string, conflict: { id, date, start_time, end_time, session_name } }
  */
 function hinteach_ajax_session_save() {
@@ -181,10 +293,11 @@ function hinteach_ajax_session_save() {
     // hinteach_schedule_check_access() đã bao gồm hinteach_user_can_module($uid, 'scheduler').
     // Không thêm check manage_hinteach_classes — khác với ajax-classes.php vì Decision Log #2.
 
-    // ── Guard: M2 chỉ hỗ trợ CREATE ─────────────────────────
+    // ── M4: Nếu có session_id → rẽ nhánh UPDATE ─────────────
     $session_id = isset( $_POST['session_id'] ) ? absint( $_POST['session_id'] ) : 0;
     if ( $session_id ) {
-        wp_send_json_error( array( 'message' => 'Chỉnh sửa buổi học chưa được hỗ trợ. Chức năng này sẽ có ở phiên bản sau.' ), 400 );
+        hinteach_ajax_session_update( $session_id, $access );
+        return;
     }
 
     // ── Thu thập input ───────────────────────────────────────
@@ -387,6 +500,412 @@ function hinteach_ajax_session_save() {
         'id'      => $new_session_id,
         'message' => 'Đã tạo buổi học thành công.',
     ) );
+}
+
+// ──────────────────────────────────────────────────────────────
+// Handler: Cập nhật buổi học (POST) — M4
+// Gọi từ hinteach_ajax_session_save() khi có session_id.
+// [HINTEACH DESIGN DECISION — D7] Conflict check khi edit.
+// [HINTEACH DESIGN DECISION — D8] Overlap check toàn bộ tập following.
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * Cập nhật buổi học — scope 'single' hoặc 'following'.
+ *
+ * Không được gọi trực tiếp qua add_action — chỉ gọi từ hinteach_ajax_session_save().
+ *
+ * @param int   $session_id  ID buổi học cần sửa
+ * @param array $access      ['user_id' => int, 'teacher_id' => int]
+ */
+function hinteach_ajax_session_update( $session_id, $access ) {
+    global $wpdb;
+    $s_table  = $wpdb->prefix . 'hinteach_sessions';
+    $c_table  = $wpdb->prefix . 'hinteach_classes';
+    $sc_table = $wpdb->prefix . 'hinteach_student_class';
+    $ss_table = $wpdb->prefix . 'hinteach_session_students';
+
+    // ── Load session hiện tại ─────────────────────────────────
+    $session = $wpdb->get_row( $wpdb->prepare(
+        "SELECT s.*, c.teacher_id
+         FROM {$s_table} s
+         JOIN {$c_table} c ON s.class_id = c.id AND c.deleted_at IS NULL
+         WHERE s.id = %d AND s.deleted_at IS NULL",
+        $session_id
+    ) );
+
+    if ( ! $session ) {
+        wp_send_json_error( array( 'message' => 'Buổi học không tồn tại hoặc đã bị xoá.' ), 404 );
+    }
+
+    // Ownership check
+    if ( ! current_user_can( 'manage_hinteach_all' ) && (int) $session->teacher_id !== $access['teacher_id'] ) {
+        wp_send_json_error( array( 'message' => 'Bạn không có quyền sửa buổi học này.' ), 403 );
+    }
+
+    // ── Thu thập input ────────────────────────────────────────
+    $class_id         = isset( $_POST['class_id'] ) ? absint( $_POST['class_id'] ) : 0;
+    $date             = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : '';
+    $start_time       = isset( $_POST['start_time'] ) ? sanitize_text_field( wp_unslash( $_POST['start_time'] ) ) : '';
+    $end_time         = isset( $_POST['end_time'] ) ? sanitize_text_field( wp_unslash( $_POST['end_time'] ) ) : '';
+    $type             = isset( $_POST['type'] ) ? sanitize_text_field( wp_unslash( $_POST['type'] ) ) : '';
+    $price            = isset( $_POST['price'] ) ? floatval( $_POST['price'] ) : 0;
+    $session_name     = isset( $_POST['session_name'] ) ? sanitize_text_field( wp_unslash( $_POST['session_name'] ) ) : '';
+    $content          = isset( $_POST['content'] ) ? sanitize_textarea_field( wp_unslash( $_POST['content'] ) ) : '';
+    $homework_content = isset( $_POST['homework_content'] ) ? sanitize_textarea_field( wp_unslash( $_POST['homework_content'] ) ) : '';
+    $general_comment  = isset( $_POST['general_comment'] ) ? sanitize_textarea_field( wp_unslash( $_POST['general_comment'] ) ) : '';
+    $display_color    = isset( $_POST['display_color'] ) ? sanitize_text_field( wp_unslash( $_POST['display_color'] ) ) : '';
+    $update_scope     = isset( $_POST['update_scope'] ) ? sanitize_text_field( wp_unslash( $_POST['update_scope'] ) ) : 'single';
+
+    // student_ids — mảng từ FormData
+    $student_ids_raw = isset( $_POST['student_ids'] ) && is_array( $_POST['student_ids'] )
+        ? $_POST['student_ids']
+        : array();
+    $student_ids = array_values( array_unique( array_filter( array_map( 'absint', $student_ids_raw ) ) ) );
+
+    // ── Validate update_scope ─────────────────────────────────
+    if ( ! in_array( $update_scope, array( 'single', 'following' ), true ) ) {
+        wp_send_json_error( array( 'message' => 'update_scope không hợp lệ (single hoặc following).' ), 400 );
+    }
+
+    // Nếu session không thuộc chuỗi, hoặc không có following → force single
+    // (an toàn, không lỗi — theo plan Mục 9.3)
+    if ( 'following' === $update_scope ) {
+        if ( ! $session->repeat_group_id ) {
+            $update_scope = 'single';
+        } else {
+            // Kiểm tra xem có buổi following thật sự không
+            $has_following = (int) $wpdb->get_var( $wpdb->prepare(
+                "SELECT COUNT(*) FROM {$s_table}
+                 WHERE repeat_group_id = %d
+                   AND deleted_at IS NULL
+                   AND (
+                       date > %s
+                       OR (date = %s AND start_time > %s)
+                       OR (date = %s AND start_time = %s AND id > %d)
+                   )",
+                (int) $session->repeat_group_id,
+                $session->date,
+                $session->date, $session->start_time,
+                $session->date, $session->start_time, $session_id
+            ) );
+            if ( 0 === $has_following ) {
+                $update_scope = 'single';
+            }
+        }
+    }
+
+    // ── Validate class_id ────────────────────────────────────
+    if ( ! $class_id ) {
+        wp_send_json_error( array( 'message' => 'Thiếu lớp học.' ), 400 );
+    }
+
+    $class = $wpdb->get_row( $wpdb->prepare(
+        "SELECT id, teacher_id, fee_amount, billing_mode FROM {$c_table} WHERE id = %d AND deleted_at IS NULL",
+        $class_id
+    ) );
+
+    if ( ! $class ) {
+        wp_send_json_error( array( 'message' => 'Lớp không tồn tại.' ), 404 );
+    }
+
+    if ( ! current_user_can( 'manage_hinteach_all' ) && (int) $class->teacher_id !== $access['teacher_id'] ) {
+        wp_send_json_error( array( 'message' => 'Bạn không có quyền sửa buổi học cho lớp này.' ), 403 );
+    }
+
+    // ── Validate fields (tái dùng logic từ CREATE) ────────────
+    // date
+    if ( empty( $date ) ) {
+        wp_send_json_error( array( 'message' => 'Thiếu ngày.' ), 400 );
+    }
+    $d = DateTime::createFromFormat( 'Y-m-d', $date );
+    if ( ! $d || $d->format( 'Y-m-d' ) !== $date ) {
+        wp_send_json_error( array( 'message' => 'Ngày không hợp lệ (định dạng YYYY-MM-DD).' ), 400 );
+    }
+
+    // start_time / end_time
+    if ( empty( $start_time ) || empty( $end_time ) ) {
+        wp_send_json_error( array( 'message' => 'Giờ bắt đầu và kết thúc không được để trống.' ), 400 );
+    }
+    if ( ! preg_match( '/^\d{2}:\d{2}$/', $start_time ) || ! preg_match( '/^\d{2}:\d{2}$/', $end_time ) ) {
+        wp_send_json_error( array( 'message' => 'Giờ không hợp lệ (định dạng HH:MM).' ), 400 );
+    }
+    if ( $start_time >= $end_time ) {
+        wp_send_json_error( array( 'message' => 'Giờ bắt đầu phải trước giờ kết thúc.' ), 400 );
+    }
+
+    // type
+    if ( ! in_array( $type, array( 'riêng', 'chung' ), true ) ) {
+        wp_send_json_error( array( 'message' => 'Loại buổi học không hợp lệ (riêng hoặc chung).' ), 400 );
+    }
+
+    // student_ids
+    $student_count = count( $student_ids );
+    if ( 'riêng' === $type ) {
+        if ( 1 !== $student_count ) {
+            wp_send_json_error( array( 'message' => 'Buổi học riêng phải có đúng 1 học sinh.' ), 400 );
+        }
+    } else {
+        if ( $student_count < 2 ) {
+            wp_send_json_error( array( 'message' => 'Buổi học chung phải có ít nhất 2 học sinh.' ), 400 );
+        }
+    }
+
+    // student_ids phải thuộc class_id
+    $ids_str = implode( ',', array_map( 'intval', $student_ids ) );
+    $valid_count = (int) $wpdb->get_var( $wpdb->prepare(
+        "SELECT COUNT(DISTINCT student_id) FROM {$sc_table} WHERE class_id = %d AND student_id IN ({$ids_str}) AND deleted_at IS NULL",
+        $class_id
+    ) );
+    if ( $valid_count !== $student_count ) {
+        wp_send_json_error( array( 'message' => 'Một hoặc nhiều học sinh không thuộc lớp này.' ), 400 );
+    }
+
+    // price
+    if ( $price < 0 ) {
+        wp_send_json_error( array( 'message' => 'Học phí không được âm.' ), 400 );
+    }
+
+    // display_color
+    if ( ! empty( $display_color ) ) {
+        $sanitized_color = sanitize_hex_color( $display_color );
+        if ( ! $sanitized_color ) {
+            wp_send_json_error( array( 'message' => 'Màu hiển thị không hợp lệ (định dạng #RRGGBB).' ), 400 );
+        }
+        $display_color = $sanitized_color;
+    } else {
+        $display_color = null;
+    }
+
+    $teacher_id_for_conflict = (int) $class->teacher_id;
+    $now = current_time( 'mysql' );
+
+    // ── Chuẩn bị data cập nhật ────────────────────────────────
+    $update_data = array(
+        'class_id'         => $class_id,
+        'start_time'       => $start_time,
+        'end_time'         => $end_time,
+        'price'            => $price,
+        'type'             => $type,
+        'session_name'     => ! empty( $session_name ) ? $session_name : null,
+        'content'          => ! empty( $content ) ? $content : null,
+        'homework_content' => ! empty( $homework_content ) ? $homework_content : null,
+        'general_comment'  => ! empty( $general_comment ) ? $general_comment : null,
+        'display_color'    => $display_color,
+        'updated_at'       => $now,
+    );
+    $update_format = array( '%d', '%s', '%s', '%f', '%s', '%s', '%s', '%s', '%s', '%s', '%s' );
+
+    // ══════════════════════════════════════════════════════════
+    // SCOPE: SINGLE
+    // ══════════════════════════════════════════════════════════
+    if ( 'single' === $update_scope ) {
+        // Thêm date cho single (following giữ date riêng từng buổi)
+        $single_data           = $update_data;
+        $single_data['date']   = $date;
+        $single_format         = array_merge( $update_format, array( '%s' ) );
+
+        // [HINTEACH DESIGN DECISION — D7] Conflict check khi edit
+        $schedule_changed = ( $date !== $session->date
+            || $start_time !== substr( $session->start_time, 0, 5 )
+            || $end_time !== substr( $session->end_time, 0, 5 ) );
+
+        if ( $schedule_changed ) {
+            $conflict = $wpdb->get_row( $wpdb->prepare(
+                "SELECT s.id, s.date, s.start_time, s.end_time, s.session_name
+                 FROM {$s_table} s
+                 JOIN {$c_table} c ON s.class_id = c.id AND c.deleted_at IS NULL
+                 WHERE c.teacher_id = %d
+                   AND s.date = %s
+                   AND s.start_time < %s
+                   AND s.end_time > %s
+                   AND s.deleted_at IS NULL
+                   AND s.id != %d
+                 LIMIT 1",
+                $teacher_id_for_conflict,
+                $date,
+                $end_time,
+                $start_time,
+                $session_id
+            ) );
+
+            if ( $conflict ) {
+                wp_send_json_error( array(
+                    'message'  => 'Buổi học bị trùng lịch.',
+                    'conflict' => array(
+                        'id'           => (int) $conflict->id,
+                        'date'         => $conflict->date,
+                        'start_time'   => $conflict->start_time,
+                        'end_time'     => $conflict->end_time,
+                        'session_name' => $conflict->session_name,
+                    ),
+                ), 409 );
+            }
+        }
+
+        // UPDATE trong transaction
+        $wpdb->query( 'START TRANSACTION' );
+
+        $ok = $wpdb->update( $s_table, $single_data, array( 'id' => $session_id ), $single_format, array( '%d' ) );
+        if ( false === $ok ) {
+            $wpdb->query( 'ROLLBACK' );
+            wp_send_json_error( array( 'message' => 'Không thể cập nhật buổi học. Vui lòng thử lại.' ), 500 );
+        }
+
+        // Đồng bộ session_students: soft-delete thừa, insert thiếu
+        hinteach_sync_session_students( $session_id, $student_ids, $now );
+
+        $wpdb->query( 'COMMIT' );
+
+        wp_send_json_success( array(
+            'id'            => $session_id,
+            'updated_count' => 1,
+            'scope'         => 'single',
+            'message'       => 'Đã cập nhật buổi học thành công.',
+        ) );
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // SCOPE: FOLLOWING
+    // ══════════════════════════════════════════════════════════
+
+    // Bước 1: FREEZE danh sách target IDs — dùng giá trị HIỆN TẠI trước khi update
+    // (đúng quy tắc FREEZE bắt buộc trong schedule.md Mục 4)
+    $target_ids = $wpdb->get_col( $wpdb->prepare(
+        "SELECT id FROM {$s_table}
+         WHERE repeat_group_id = %d
+           AND deleted_at IS NULL
+           AND (
+               date > %s
+               OR (date = %s AND start_time > %s)
+               OR (date = %s AND start_time = %s AND id >= %d)
+           )
+         ORDER BY date ASC, start_time ASC, id ASC",
+        (int) $session->repeat_group_id,
+        $session->date,
+        $session->date, $session->start_time,
+        $session->date, $session->start_time, $session_id
+    ) );
+    $target_ids = array_map( 'intval', $target_ids );
+
+    if ( empty( $target_ids ) ) {
+        // Không nên xảy ra (đã check has_following ở trên), nhưng an toàn
+        wp_send_json_error( array( 'message' => 'Không tìm thấy buổi nào để cập nhật.' ), 400 );
+    }
+
+    // Bước 2: [HINTEACH DESIGN DECISION — D7/D8] Conflict check cho TOÀN BỘ tập target
+    // Mỗi buổi giữ nguyên date riêng (HAR 08), chỉ đổi start_time/end_time
+    $schedule_changed = ( $start_time !== substr( $session->start_time, 0, 5 )
+        || $end_time !== substr( $session->end_time, 0, 5 ) );
+
+    if ( $schedule_changed ) {
+        // Load ngày riêng của từng buổi trong tập target
+        $target_ids_str   = implode( ',', $target_ids );
+        $target_dates_raw = $wpdb->get_results(
+            "SELECT id, date FROM {$s_table} WHERE id IN ({$target_ids_str})"
+        );
+
+        foreach ( $target_dates_raw as $td ) {
+            $conflict = $wpdb->get_row( $wpdb->prepare(
+                "SELECT s.id, s.date, s.start_time, s.end_time, s.session_name
+                 FROM {$s_table} s
+                 JOIN {$c_table} c ON s.class_id = c.id AND c.deleted_at IS NULL
+                 WHERE c.teacher_id = %d
+                   AND s.date = %s
+                   AND s.start_time < %s
+                   AND s.end_time > %s
+                   AND s.deleted_at IS NULL
+                   AND s.id NOT IN ({$target_ids_str})
+                 LIMIT 1",
+                $teacher_id_for_conflict,
+                $td->date,
+                $end_time,
+                $start_time
+            ) );
+
+            if ( $conflict ) {
+                wp_send_json_error( array(
+                    'message'  => 'Buổi học bị trùng lịch.',
+                    'conflict' => array(
+                        'id'           => (int) $conflict->id,
+                        'date'         => $conflict->date,
+                        'start_time'   => $conflict->start_time,
+                        'end_time'     => $conflict->end_time,
+                        'session_name' => $conflict->session_name,
+                    ),
+                ), 409 );
+            }
+        }
+    }
+
+    // Bước 3: UPDATE toàn bộ tập target trong transaction
+    // KHÔNG update date — mỗi buổi giữ ngày riêng (HAR 08 confirmed)
+    $wpdb->query( 'START TRANSACTION' );
+
+    $updated_count = 0;
+    foreach ( $target_ids as $tid ) {
+        $ok = $wpdb->update( $s_table, $update_data, array( 'id' => $tid ), $update_format, array( '%d' ) );
+        if ( false === $ok ) {
+            $wpdb->query( 'ROLLBACK' );
+            wp_send_json_error( array( 'message' => 'Không thể cập nhật buổi học ID ' . $tid . '. Vui lòng thử lại.' ), 500 );
+        }
+        $updated_count++;
+
+        // Đồng bộ session_students cho từng buổi trong tập
+        hinteach_sync_session_students( $tid, $student_ids, $now );
+    }
+
+    $wpdb->query( 'COMMIT' );
+
+    wp_send_json_success( array(
+        'id'            => $session_id,
+        'updated_count' => $updated_count,
+        'scope'         => 'following',
+        'message'       => 'Đã cập nhật ' . $updated_count . ' buổi trong chuỗi lặp.',
+    ) );
+}
+
+/**
+ * Đồng bộ session_students: soft-delete học sinh thừa, insert học sinh thiếu.
+ * Không đụng fee_amount (D3 — chờ GĐ4).
+ *
+ * @param int      $session_id
+ * @param int[]    $student_ids  Danh sách student_id mới
+ * @param string   $now          Thời điểm hiện tại (datetime)
+ */
+function hinteach_sync_session_students( $session_id, $student_ids, $now ) {
+    global $wpdb;
+    $ss_table = $wpdb->prefix . 'hinteach_session_students';
+
+    // Lấy danh sách student_id hiện tại (chưa xoá)
+    $current_ids = $wpdb->get_col( $wpdb->prepare(
+        "SELECT student_id FROM {$ss_table} WHERE session_id = %d AND deleted_at IS NULL",
+        $session_id
+    ) );
+    $current_ids = array_map( 'intval', $current_ids );
+
+    // Soft-delete học sinh không còn trong danh sách mới
+    $to_remove = array_diff( $current_ids, $student_ids );
+    foreach ( $to_remove as $sid ) {
+        $wpdb->update(
+            $ss_table,
+            array( 'deleted_at' => $now, 'updated_at' => $now ),
+            array( 'session_id' => $session_id, 'student_id' => $sid, 'deleted_at' => null ),
+            array( '%s', '%s' ),
+            array( '%d', '%d' )
+        );
+    }
+
+    // Insert học sinh mới chưa có
+    $to_add = array_diff( $student_ids, $current_ids );
+    foreach ( $to_add as $sid ) {
+        $wpdb->insert( $ss_table, array(
+            'session_id' => $session_id,
+            'student_id' => (int) $sid,
+            'paid'       => 0,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ), array( '%d', '%d', '%d', '%s', '%s' ) );
+    }
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -711,5 +1230,152 @@ function hinteach_ajax_session_save_recurring() {
         'created_count'   => count( $all_session_ids ),
         'repeat_group_id' => $base_session_id,
         'message'         => 'Đã tạo ' . count( $all_session_ids ) . ' buổi học thành công.',
+    ) );
+}
+
+// ──────────────────────────────────────────────────────────────
+// Handler: Xoá buổi học (POST) — M4
+// Soft delete (deleted_at), cascade session_students.
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * Xoá buổi học — scope 'single' hoặc 'following'.
+ *
+ * Input (POST):
+ *   session_id   int     Bắt buộc
+ *   scope        string  'single' (mặc định) | 'following'
+ *
+ * Response: { deleted_count: int, scope: string, message: string }
+ */
+function hinteach_ajax_session_delete() {
+    $access = hinteach_schedule_check_access();
+
+    $session_id = isset( $_POST['session_id'] ) ? absint( $_POST['session_id'] ) : 0;
+    if ( ! $session_id ) {
+        wp_send_json_error( array( 'message' => 'Thiếu session_id.' ), 400 );
+    }
+
+    $scope = isset( $_POST['scope'] ) ? sanitize_text_field( wp_unslash( $_POST['scope'] ) ) : 'single';
+    if ( ! in_array( $scope, array( 'single', 'following' ), true ) ) {
+        wp_send_json_error( array( 'message' => 'scope không hợp lệ (single hoặc following).' ), 400 );
+    }
+
+    global $wpdb;
+    $s_table  = $wpdb->prefix . 'hinteach_sessions';
+    $c_table  = $wpdb->prefix . 'hinteach_classes';
+    $ss_table = $wpdb->prefix . 'hinteach_session_students';
+
+    // Load session
+    $session = $wpdb->get_row( $wpdb->prepare(
+        "SELECT s.*, c.teacher_id
+         FROM {$s_table} s
+         JOIN {$c_table} c ON s.class_id = c.id AND c.deleted_at IS NULL
+         WHERE s.id = %d AND s.deleted_at IS NULL",
+        $session_id
+    ) );
+
+    if ( ! $session ) {
+        wp_send_json_error( array( 'message' => 'Buổi học không tồn tại hoặc đã bị xoá.' ), 404 );
+    }
+
+    // Ownership check
+    if ( ! current_user_can( 'manage_hinteach_all' ) && (int) $session->teacher_id !== $access['teacher_id'] ) {
+        wp_send_json_error( array( 'message' => 'Bạn không có quyền xoá buổi học này.' ), 403 );
+    }
+
+    // Nếu scope=following nhưng session không thuộc chuỗi → force single
+    if ( 'following' === $scope && ! $session->repeat_group_id ) {
+        $scope = 'single';
+    }
+
+    $now = current_time( 'mysql' );
+
+    // ══════════════════════════════════════════════════════════
+    // SCOPE: SINGLE
+    // ══════════════════════════════════════════════════════════
+    if ( 'single' === $scope ) {
+        $wpdb->query( 'START TRANSACTION' );
+
+        // Soft-delete session
+        $ok = $wpdb->update(
+            $s_table,
+            array( 'deleted_at' => $now, 'updated_at' => $now ),
+            array( 'id' => $session_id ),
+            array( '%s', '%s' ),
+            array( '%d' )
+        );
+        if ( false === $ok ) {
+            $wpdb->query( 'ROLLBACK' );
+            wp_send_json_error( array( 'message' => 'Không thể xoá buổi học. Vui lòng thử lại.' ), 500 );
+        }
+
+        // Cascade soft-delete session_students
+        $wpdb->query( $wpdb->prepare(
+            "UPDATE {$ss_table} SET deleted_at = %s, updated_at = %s WHERE session_id = %d AND deleted_at IS NULL",
+            $now, $now, $session_id
+        ) );
+
+        $wpdb->query( 'COMMIT' );
+
+        wp_send_json_success( array(
+            'deleted_count' => 1,
+            'scope'         => 'single',
+            'message'       => 'Đã xoá buổi học.',
+        ) );
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // SCOPE: FOLLOWING
+    // ══════════════════════════════════════════════════════════
+
+    // FREEZE tập target IDs — dùng predicate đã chốt (schedule.md Mục 4)
+    $target_ids = $wpdb->get_col( $wpdb->prepare(
+        "SELECT id FROM {$s_table}
+         WHERE repeat_group_id = %d
+           AND deleted_at IS NULL
+           AND (
+               date > %s
+               OR (date = %s AND start_time > %s)
+               OR (date = %s AND start_time = %s AND id >= %d)
+           )
+         ORDER BY date ASC, start_time ASC, id ASC",
+        (int) $session->repeat_group_id,
+        $session->date,
+        $session->date, $session->start_time,
+        $session->date, $session->start_time, $session_id
+    ) );
+    $target_ids = array_map( 'intval', $target_ids );
+
+    if ( empty( $target_ids ) ) {
+        wp_send_json_error( array( 'message' => 'Không tìm thấy buổi nào để xoá.' ), 400 );
+    }
+
+    $wpdb->query( 'START TRANSACTION' );
+
+    $target_ids_str = implode( ',', $target_ids );
+
+    // Soft-delete sessions
+    $deleted_count = $wpdb->query( $wpdb->prepare(
+        "UPDATE {$s_table} SET deleted_at = %s, updated_at = %s WHERE id IN ({$target_ids_str}) AND deleted_at IS NULL",
+        $now, $now
+    ) );
+
+    if ( false === $deleted_count ) {
+        $wpdb->query( 'ROLLBACK' );
+        wp_send_json_error( array( 'message' => 'Không thể xoá buổi học. Vui lòng thử lại.' ), 500 );
+    }
+
+    // Cascade soft-delete session_students
+    $wpdb->query( $wpdb->prepare(
+        "UPDATE {$ss_table} SET deleted_at = %s, updated_at = %s WHERE session_id IN ({$target_ids_str}) AND deleted_at IS NULL",
+        $now, $now
+    ) );
+
+    $wpdb->query( 'COMMIT' );
+
+    wp_send_json_success( array(
+        'deleted_count' => (int) $deleted_count,
+        'scope'         => 'following',
+        'message'       => 'Đã xoá ' . (int) $deleted_count . ' buổi trong chuỗi lặp.',
     ) );
 }
