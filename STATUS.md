@@ -194,23 +194,31 @@ History:
 
 - `<docs-commit>` — docs: record gd3 m3 recurrence completion
 
+- `<m4-backend-commit>` — feat: implement gd3 m4 edit/delete recurrence backend
+
+- `<m4-frontend-commit>` — feat: implement gd3 m4 edit/delete recurrence UI
+
+- `<m4-docs-commit>` — docs: record gd3 m4 completion history
+
 ---
 
 ### GĐ3 — Completed
 
 - M1 — Calendar Shell + Session List READ ONLY ✅
+
 - M2 — Create Single Session ✅
+
 - M3 — Recurrence / Repeat Session ✅
+
+- M4 — Edit/Delete Recurrence ✅
 
 ---
 
 ### GĐ3 — Còn lại
 
-- M4:
-  - edit/delete recurrence
-
 - M5:
   - quick-entry
+
   - journal/score
 
 ## GĐ4 — Tuition
