@@ -2,7 +2,7 @@
 
 > Module: Schedule | Status: **NOT STARTED** (GĐ3)
 > Xem `STATUS.md` cho trạng thái hiện tại.
-> Spec cập nhật: 2026-08-28 — chốt quyết định thiết kế HinTeach sau review kiến trúc; đối chiếu HAR 3.1–3.11 (nttclass.com).
+> Spec cập nhật: 2026-08-30 — sửa mục 10 (Display Color) để tách rõ HAR evidence khỏi implementation của HinTeach; thêm mục 18 (Calendar Context Actions) dựa trên HAR 3.13–3.16.
 > Nguồn ưu tiên: HAR thực tế > quyết định thiết kế HinTeach > spec cũ.
 
 ---
@@ -17,6 +17,8 @@ Mọi rule trong spec này được gán 1 trong 3 nhãn:
 
 > ⚠️ Implementation detail của nttclass (tên field, flag, endpoint) **không** tự động trở thành requirement của HinTeach. Chỉ lấy business logic cốt lõi và tự map sang pattern HinTeach.
 
+> ⚠️ **UI/behavior của hệ thống tham khảo (nttclass) không phải source of truth cho implementation.** HAR chỉ xác nhận API/payload/data behavior tồn tại ở hệ thống tham khảo. Nếu UI gốc hoạt động không ổn định hoặc có bug, HinTeach **không copy** bug đó — HinTeach tự implement lại theo đúng business logic cốt lõi đã xác nhận từ HAR.
+
 ---
 
 ## 1. Phạm vi GĐ3
@@ -28,7 +30,7 @@ GĐ3 bao gồm:
 - Sửa buổi học theo scope "single" hoặc "following".
 - Xoá buổi học theo scope "single" hoặc "following".
 - Ghi nhanh nhật ký và điểm trong buổi học (quick-entry) — chỉ phần GĐ3 cần cung cấp; không triển khai toàn bộ GĐ5 ở đây.
-- Đổi màu hiển thị buổi học trên lịch.
+- Đổi màu hiển thị buổi học trên lịch (Calendar Action — implementation riêng, xem Mục 10 và Mục 18).
 - Hiển thị lịch (tuần / tháng).
 - Filter lịch — **CHƯA XÁC NHẬN TỪ HAR** (xem Mục 11).
 
@@ -409,22 +411,70 @@ scoreGroups: [
 
 ---
 
-## 10. Display Color — [HAR CONFIRMED — HAR 3.11] + [HINTEACH DESIGN DECISION]
+## 10. Display Color — [HAR CONFIRMED] + [HINTEACH IMPLEMENTATION DECISION]
 
-- Mỗi session có `displayColor` (hex string, VD `#RRGGBB`).
-- Đổi màu là **action riêng biệt**, tách khỏi generic session edit.
-- Action đổi màu nhận payload: `{ displayColor: "#RRGGBB" }`.
+### Evidence
 
-### Behavior trong recurrence chain
+HAR 3.11 xác nhận hệ thống tham khảo (nttclass) có action đổi màu:
 
-- Khi đổi màu session thuộc recurrence chain: **tự propagate cho current session + tất cả session sau (following)** trong cùng `recurrenceGroupId`. **[HAR CONFIRMED — HAR 3.11]**
-- Request không cần gửi scope riêng — server tự xử lý propagation.
-- "following" cùng định nghĩa với Mục 7b: theo position trong chuỗi, không theo `date < today`. **[HINTEACH DESIGN DECISION]**
+- Endpoint đổi màu riêng, tách khỏi generic session edit.
+- Payload chỉ chứa `displayColor` (hex string, VD `#RRGGBB`).
+- HAR 3.11 quan sát hệ thống tham khảo có behavior propagate: **current + following** trong cùng `recurrenceGroupId` được đổi màu; session trước không đổi. Đây là **business behavior được lấy làm evidence** — cách triển khai cụ thể của HinTeach được định nghĩa ở phần "HinTeach scope" bên dưới, không phải là copy nguyên implementation của hệ thống tham khảo.
 - Mẫu HAR 3.11: target = session có position 1 (tính từ 0), `updatedCount = 3` (current + 2 following); session trước không đổi.
 
-**`propagateDisplayColor` — [KHÔNG DÙNG trong generic edit]:** **[HINTEACH DESIGN DECISION]**
+**[HAR CONFIRMED — HAR 3.11]**
+
+### HinTeach scope
+
+HinTeach implement đổi màu như một **Calendar Action riêng** (xem Mục 18), không nằm trong generic session edit.
+
+Flow dự kiến:
+
+```
+Session
+  → Context menu
+  → Đổi màu
+  → Chọn màu
+  → Update display_color
+```
+
+### Recurrence behavior
+
+Khi session thuộc recurrence group:
+
+- Màu được áp dụng cho **current + following** session trong cùng `recurrenceGroupId`.
+- Không ảnh hưởng session trước.
+- Request không cần gửi scope riêng — server tự xử lý propagation.
+- "following" cùng định nghĩa với Mục 7b/Mục 4: theo tuple `(repeat_group_id, date, start_time, id)`, **không theo `date < today`**.
+
+**[HINTEACH DESIGN DECISION]**
+
+### UI implementation
+
+> ⚠️ **UI đổi màu của hệ thống tham khảo (nttclass) không được coi là source of truth.** Nếu UI gốc hiện đang hoạt động không ổn định hoặc có bug, HinTeach **không copy** hành vi đó.
+
+HinTeach cần tự implement:
+
+- Context menu action ("Đổi màu").
+- Color picker.
+- Update flow (gọi action đổi màu riêng, không qua generic edit endpoint).
+- Refresh calendar sau khi đổi màu (cập nhật hiển thị current + following ngay trên UI).
+
+Việc implement không phụ thuộc vào việc UI gốc của nttclass có hoạt động đúng hay không — chỉ business logic (propagation current + following) được lấy làm chuẩn từ HAR.
+
+**`propagateDisplayColor` — [KHÔNG DÙNG trong generic edit]:**
 - Field `propagateDisplayColor` quan sát từ HAR nttclass **không được tích hợp** vào generic session edit payload.
 - HinTeach dùng action đổi màu riêng với propagation tự động "current + following".
+
+**[HINTEACH DESIGN DECISION]**
+
+### Out of scope
+
+Không implement trong GĐ3:
+
+- Đổi màu trong generic edit (đã tách riêng — xem trên).
+- Field `propagateDisplayColor` trong session update payload.
+- Scope đổi màu khác ("chỉ 1 buổi" khi thuộc chuỗi, hoặc "toàn bộ chuỗi bất kể vị trí") nếu chưa có evidence.
 
 > **Các scope màu khác — [CHƯA XÁC NHẬN]:** Không tự thêm behavior "đổi chỉ 1 buổi" hay "đổi toàn bộ chuỗi" nếu chưa có bằng chứng.
 
@@ -505,6 +555,11 @@ dựa trên quyết định thiết kế nội bộ, không phụ thuộc behavi
 | Conflict khi edit (không phải create) gây trùng lịch | **[CHƯA XÁC NHẬN]** — HAR 3.6 chỉ xác nhận create/batch; sẽ xác định trong implementation plan |
 | Recurrence renumber sau delete following | **[HINTEACH DESIGN DECISION]** — Không áp dụng: HinTeach không persist `recurrence_sequence`, nên không có gì để renumber; thứ tự luôn tính động theo tuple ở Mục 4
 | Fee phân chia giữa các học sinh trong buổi chung (rule tổng quát) | **[HINTEACH DESIGN DECISION]** — fee_amount = NULL mặc định; tính động khi cần; xem `docs/specs/tuition.md` |
+| Copy field nào khi Sao chép buổi học | **[CHƯA XÁC NHẬN]** — xem Mục 18, cần phân tích thêm từ HAR 3.16 |
+| Paste tạo session mới qua API nào | **[CHƯA XÁC NHẬN]** — xem Mục 18 |
+| Duplicate: mở form prefill hay tạo ngay | **[CHƯA XÁC NHẬN]** — xem Mục 18 |
+| Recurrence khi copy/duplicate (có tạo group mới không) | **[CHƯA XÁC NHẬN]** — xem Mục 18 |
+| Conflict handling khi paste/duplicate trùng lịch | **[CHƯA XÁC NHẬN]** — xem Mục 18 |
 
 ---
 
@@ -513,6 +568,11 @@ dựa trên quyết định thiết kế nội bộ, không phụ thuộc behavi
 | Backend | Frontend |
 |---|---|
 | `includes/ajax-schedule.php` | `assets/modules/schedule.js` |
+
+> **Potential files cho M6 (Calendar Actions)** — chỉ tham khảo, **không tạo file mới nếu chưa có plan** (`docs/plans/gd3-calendar-actions-plan.md`):
+> - `assets/modules/schedule.js`
+> - `assets/style.css`
+> - `includes/ajax-schedule.php`
 
 ---
 
@@ -536,6 +596,120 @@ dựa trên quyết định thiết kế nội bộ, không phụ thuộc behavi
 - [ ] Xoá buổi `billing_mode='monthly'` → học phí KHÔNG đổi **[CHƯA XÁC NHẬN — giữ rule]**
 - [ ] Quick-entry: chỉ cập nhật đúng `sessionId` đang mở, không propagate sang following **[HINTEACH DESIGN DECISION]**
 - [ ] Quick-entry: lưu journal + `scoreGroups` → server tạo score records gắn `sessionId` **[HAR CONFIRMED]**
-- [ ] Đổi màu (action riêng): buổi trong chuỗi → current + following đổi màu theo position, buổi trước không đổi **[HAR CONFIRMED + HINTEACH DESIGN DECISION]**
+- [ ] Đổi màu (action riêng, tự implement UI): buổi trong chuỗi → current + following đổi màu theo position, buổi trước không đổi **[HAR CONFIRMED + HINTEACH IMPLEMENTATION DECISION]**
 - [ ] Đổi màu buổi đơn lẻ (không thuộc chuỗi) → chỉ buổi đó đổi
+- [ ] Context menu session (chuột phải) → hiện đúng 4 mục: Đổi màu / Sao chép / Nhân bản / Xóa **[CHƯA IMPLEMENT — xem Mục 18]**
+- [ ] Context menu vùng trống (chuột phải) → hiện đúng 2 mục: Thêm buổi học / Dán (disabled nếu chưa copy) **[CHƯA IMPLEMENT — xem Mục 18]**
+- [ ] Duplicate session → tạo flow nhân bản đúng theo Decision Log M6 **[CHƯA IMPLEMENT — xem Mục 18]**
 - [ ] Filter lịch — **[CHƯA XÁC NHẬN]**
+
+---
+
+## 18. Calendar Context Actions — CHƯA IMPLEMENT
+
+Nguồn:
+
+- HAR 3.13 — session context menu (chỉ xác nhận UI menu xuất hiện, chưa xác nhận API behavior)
+- HAR 3.14 — change color context flow
+- HAR 3.15 — copy session (capture thao tác sao chép)
+- HAR 3.16 — paste session (capture flow dán tạo buổi mới)
+
+> Ghi chú: 4 HAR trên đã đủ evidence để bắt đầu phân tích và lập plan M6. Một số business rule (copy field, duplicate behavior, API contract) vẫn cần được chốt trong Decision Log của M6 — không cần lấy thêm HAR copy/paste riêng, vì UX thực tế là "Copy → Paste ở vị trí khác", không phải hai feature độc lập.
+
+### Session context menu (chuột phải vào session)
+
+```
+Buổi học
+│
+├── 🎨 Đổi màu
+├── 📋 Sao chép
+├── ⊕ Nhân bản
+└── 🗑 Xóa
+```
+
+**Bỏ:** ✂ Cắt — vì Cắt = move/reschedule, kéo theo drag-drop, chưa làm ở phase này (xem M7).
+
+### Empty calendar context menu (chuột phải vào vùng trống)
+
+```
+Vị trí trống
+│
+├── ＋ Thêm buổi học
+└── 📌 Dán
+```
+
+**Behavior:**
+
+- Nếu chưa copy gì → "Dán" disabled.
+- Nếu đã copy → "Dán" active.
+
+### Đổi màu
+
+Đã rõ ràng — xem Mục 10:
+
+- Action riêng biệt, không nhét vào generic session edit.
+- Propagate current + following trong recurrence chain.
+- UI cần tự implement, không phụ thuộc UI tham khảo.
+
+### Sao chép / Dán / Nhân bản — CHƯA IMPLEMENT
+
+Cần chốt tiếp từ HAR 3.15–3.16 trước khi lập implementation plan:
+
+| Câu hỏi | Trạng thái |
+|---|---|
+| Copy lưu state ở client hay server | **[CHƯA XÁC NHẬN]** |
+| Paste gọi lại `POST /api/sessions` hay endpoint riêng | **[CHƯA XÁC NHẬN]** |
+| Copy field nào (class, student, price, content, color...) | **[CHƯA XÁC NHẬN]** |
+| Recurrence có được copy theo không | **[CHƯA XÁC NHẬN]** |
+| Duplicate = mở form tạo mới có prefill, hay tạo ngay lập tức | **[CHƯA XÁC NHẬN]** |
+| Conflict handling khi paste/duplicate trùng lịch | **[CHƯA XÁC NHẬN]** — có thể áp dụng cùng rule 409 ở Mục 5, cần xác nhận |
+
+### Không tự suy diễn
+
+Không implement các behavior sau nếu chưa có HAR hoặc quyết định thiết kế rõ ràng:
+
+- Cơ chế lưu clipboard (client-side state vs server-side session).
+- API endpoint cụ thể cho paste/duplicate.
+- Danh sách field được copy.
+- Có tạo `recurrenceGroupId` mới khi duplicate một buổi thuộc chuỗi hay không.
+
+### Bước tiếp theo
+
+Trước khi code M6, cần tạo tài liệu plan riêng:
+
+```
+docs/plans/gd3-calendar-actions-plan.md
+```
+
+theo đúng flow đã dùng ở M4:
+
+1. Đọc lại HAR 3.13–3.16.
+2. Đọc bundle context menu (nếu có).
+3. Chốt Decision Log cho từng câu hỏi ở bảng trên.
+4. Viết Plan.
+5. Owner approve.
+6. Code.
+
+---
+
+## Roadmap tham khảo (GĐ3 Schedule)
+
+```
+M1 ✅ Calendar Shell
+M2 ✅ Create Session
+M3 ✅ Recurrence
+M4 ✅ Edit/Delete Recurrence
+M5 ⏳ Quick Entry + Journal + Score
+    - Quick entry session
+    - Student details
+    - Score records
+M6 ⏳ Calendar Actions
+    - Context menu shortcut
+    - Display color
+    - Copy/Paste
+    - Duplicate
+M7 ⏳ Calendar Interaction
+    - Drag create
+    - Drag move
+    - Resize
+```
