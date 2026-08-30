@@ -1,8 +1,8 @@
 # Specification — Thời khoá biểu / Buổi học
 
-> Module: Schedule | Status: **NOT STARTED** (GĐ3)
+> Module: Schedule | Status: **IN PROGRESS** (GĐ3 — M1–M5 ✅ completed, M6–M7 ⏳ chưa bắt đầu)
 > Xem `STATUS.md` cho trạng thái hiện tại.
-> Spec cập nhật: 2026-08-30 — sửa mục 10 (Display Color) để tách rõ HAR evidence khỏi implementation của HinTeach; thêm mục 18 (Calendar Context Actions) dựa trên HAR 3.13–3.16.
+> Spec cập nhật: 2026-08-31 — thêm Implementation Status cho M5 (Mục 9) và cập nhật roadmap.
 > Nguồn ưu tiên: HAR thực tế > quyết định thiết kế HinTeach > spec cũ.
 
 ---
@@ -379,6 +379,15 @@ GĐ3 phải implement action quick-entry trong `ajax-schedule.php`:
 }
 ```
 
+> **[HINTEACH DESIGN DECISION — M5]**
+>
+> Quick-entry implementation của HinTeach (M5) **không cập nhật**:
+> - `feeAmount`
+> - `paid`
+>
+> Các field này thuộc billing/payment boundary (GĐ4), không thuộc phạm vi quick-entry journal/score của M5.
+> Block payload phía trên là HAR evidence đầy đủ (giữ nguyên để tham khảo), nhưng không đồng nghĩa M5 phải implement toàn bộ các field này.
+
 **scoreGroups schema [HAR CONFIRMED — HAR 3.10]:**
 
 ```
@@ -408,6 +417,25 @@ scoreGroups: [
 - **GĐ5 mở rộng trên data này:** quản lý điểm đầy đủ, nhật ký, báo cáo.
 - **Không triển khai toàn bộ GĐ5 trong GĐ3.**
 - `sessionId` trên score records là link chính giữa GĐ3 và GĐ5.
+
+### Implementation Status — GĐ3 M5 (commit `40ce7cd`, 2026-08-31)
+
+Implemented:
+
+- `hinteach_session_quick_entry` (ajax-schedule.php)
+- Session record update (`content`/`homework_content`/`session_name`/`general_comment`)
+- Student journal update (`session_students`: `homework`/`attitude`/`individual_comment`/`note`)
+- Score creation via quick-entry (`wp_hinteach_grades`)
+- Score reload trong edit modal khi mở lại session
+
+Database:
+
+- `wp_hinteach_grades.session_id` — dependency đã có sẵn trong schema trước M5; M5 là nơi đầu tiên **sử dụng** cột này để liên kết điểm với buổi học qua quick-entry
+- `wp_hinteach_grades.score_type_label` — cột mới, thêm trong M5
+
+Decision applied:
+
+- **D3 Option B:** giữ nguyên `type ENUM(homework,test,final)` cố định cho phân loại nghiệp vụ, thêm `score_type_label` (tự do) song song để hiển thị nhãn loại điểm tùy biến — không thay `type` thành free-text để tránh phá vỡ logic dựa trên ENUM ở nơi khác.
 
 ---
 
@@ -699,7 +727,7 @@ M1 ✅ Calendar Shell
 M2 ✅ Create Session
 M3 ✅ Recurrence
 M4 ✅ Edit/Delete Recurrence
-M5 ⏳ Quick Entry + Journal + Score
+M5 ✅ Quick Entry + Session Record + Score
     - Quick entry session
     - Student details
     - Score records

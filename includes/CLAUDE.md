@@ -1,6 +1,6 @@
 # includes/ — BACKEND CONTEXT
 > Thuộc plugin `hinteach` | Đọc `../CLAUDE.md` trước file này
-> Cập nhật: 2026-08-27 — sửa references cho khớp cấu trúc docs/ mới.
+> Cập nhật: 2026-08-31 — thêm endpoint `hinteach_session_quick_entry` và làm rõ schema `wp_hinteach_grades` (GĐ3 M5).
 
 ---
 
@@ -19,7 +19,7 @@
 | `wp_hinteach_billing_payments` | student_id, class_id, period_key (VD: `2026-08` hoặc `course:2026-01-01:2026-06-30`), paid (bool), amount_paid | CHỈ dùng cho `billing_mode IN ('course','monthly')` — không liên quan `wp_hinteach_payments` |
 | `wp_hinteach_payments` | student_id, class_id, session_id (nullable), amount, paid_at, note | Lịch sử thu tiền THẬT cho chế độ `session` — mỗi lần xác nhận thu = 1 record mới, không update đè |
 | `wp_hinteach_tuition_adjustments` | student_id (nullable)/class_id (nullable), type (`surcharge`/`discount`), calc_type (`amount`/`percent`), value, month_from, month_to, note | scope: nếu `student_id` NULL → áp dụng cả lớp; đúng field UI: `tuitionAdjustmentType`, `tuitionAdjustmentMode`, `tuitionAdjustmentValue`, `tuitionAdjustmentMonthStart/End` |
-| `wp_hinteach_grades` | student_id, class_id, session_id (nullable — liên kết buổi học khi điểm được nhập qua quick-entry GD3), test_name, score, scale, type (`homework`/`test`/`final`), date, note | KHÔNG có type=`quiz` ở giai đoạn hiện tại (hoãn cùng quiz-engine) |
+| `wp_hinteach_grades` | student_id, class_id, session_id (nullable — liên kết grade record với session khi điểm được nhập qua quick-entry GĐ3), test_name, score, scale, type (`homework`/`test`/`final`), score_type_label (VARCHAR — nhãn hiển thị loại điểm, theo D3 Option B: giữ `type` ENUM cố định + thêm label tự do song song), date, note | KHÔNG có type=`quiz` ở giai đoạn hiện tại (hoãn cùng quiz-engine) |
 | `wp_hinteach_assistant_permissions` | assistant_user_id, module_key, enabled | module_key thuộc tập: `dashboard, scheduler, tuition, students, classProfiles` (đúng như `assistantPermissionDefinitions()` trong bundle.js) |
 | `wp_hinteach_license` | user_id, expires_at, status (`active`/`grace`/`locked`/`exempt`), last_confirmed_at | |
 
@@ -36,6 +36,7 @@
 | `hinteach_session_save` (create + update, scope: `single`/`following`) | ajax-schedule.php | POST | quyền `scheduler` (assistant) hoặc `manage_hinteach_classes` |
 | `hinteach_session_save_recurring` | ajax-schedule.php | POST | quyền `scheduler` (assistant) hoặc `manage_hinteach_classes` |
 | `hinteach_session_delete` (scope: `single`/`following`) | ajax-schedule.php | POST | quyền `scheduler` (assistant) hoặc `manage_hinteach_classes` |
+| `hinteach_session_quick_entry` | ajax-schedule.php | POST | quyền `scheduler` (assistant) hoặc `manage_hinteach_classes` — chỉ áp dụng đúng `session_id` đang mở, KHÔNG propagate sang session following (xem `docs/specs/schedule.md` mục 9). Cập nhật `content`/`homework_content`/`session_name`/`general_comment` của session, cập nhật `session_students` (nhật ký per-student), và tạo record trong `wp_hinteach_grades` gắn `session_id` |
 | `hinteach_tuition_get` | ajax-tuition.php | GET | quyền `tuition` (assistant) hoặc `manage_hinteach_classes` |
 | `hinteach_tuition_adjustment_save` | ajax-tuition.php | POST | `manage_hinteach_classes` |
 | `hinteach_billing_payment_confirm` | ajax-tuition.php | POST | `manage_hinteach_classes` — dùng riêng cho `course`/`monthly`, KHÔNG dùng chung hàm với xác nhận thu buổi `session` |
@@ -141,4 +142,3 @@ hinteach_parse_uploaded_table( $file_path, $expected_columns ) : array
 
 1. Quan hệ giữa "lịch cố định" khi tạo lớp (`schedule_type='fixed'` + `fixed_weekdays`) và "lặp lịch" — xem `docs/specs/schedule.md` và `STATUS.md` mục "Decisions Not Yet Implemented".
 2. Quan hệ phụ thu lúc tạo lớp vs bảng `tuition_adjustments` — xem `docs/specs/tuition.md` và `STATUS.md` mục "Decisions Not Yet Implemented".
-3. Server gốc đã bị suspended — kế hoạch lấy HAR dừng vô thời hạn. Xem `STATUS.md` mục "Known Limitations".
