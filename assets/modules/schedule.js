@@ -62,6 +62,7 @@ const ScheduleModule = {
             const sessions = await this._loadSessions( week.fromStr, week.toStr );
             cal.innerHTML = this._buildCalendarHtml( week, sessions );
             this._bindNavEvents();
+            this._bindSessionEvents();
         } catch ( err ) {
             cal.innerHTML = `<div class="ht-error"><p>Lỗi tải lịch: ${HT.utils.escapeHtml(err.message)}</p></div>`;
         }
@@ -143,12 +144,22 @@ const ScheduleModule = {
                          ( s.end_time ? ' – ' + this._fmtTime( s.end_time ) : '' );
 
         return `
-            <div class="ht-session-block" style="border-left:3px solid ${color};">
+            <div class="ht-session-block" data-id="${s.id}" style="border-left:3px solid ${color};">
                 <div class="ht-session-block__name">${name}</div>
                 ${sessName ? `<div class="ht-session-block__title">${sessName}</div>` : ''}
                 <div class="ht-session-block__time">${HT.utils.escapeHtml( timeStr )}</div>
             </div>
         `;
+    },
+
+    /** Bind click sự kiện trên các session block để mở modal chỉnh sửa */
+    _bindSessionEvents() {
+        document.querySelectorAll( '.ht-session-block[data-id]' ).forEach( el => {
+            el.addEventListener( 'click', () => {
+                const id = parseInt( el.dataset.id, 10 );
+                if ( id ) this._openEditForm( id );
+            } );
+        } );
     },
 
     // ──────────────────────────────────────────────────────────
@@ -855,6 +866,391 @@ const ScheduleModule = {
             }
             const saveBtn = document.getElementById( 'ht-session-form-save' );
             if ( saveBtn ) { saveBtn.disabled = false; saveBtn.textContent = btnLabel; }
+        }
+    },
+
+    // ──────────────────────────────────────────────────────────
+    // M4: Edit & Delete Session Handlers
+    // ──────────────────────────────────────────────────────────
+
+    /**
+     * Mở modal chỉnh sửa buổi học.
+     *
+     * @param {number} sessionId
+     */
+    async _openEditForm( sessionId ) {
+        try {
+            const [ sessionData, classesData ] = await Promise.all( [
+                HT.api.call( 'hinteach_session_get', { session_id: sessionId }, 'GET' ),
+                HT.api.call( 'hinteach_class_list', {}, 'POST' ),
+            ] );
+
+            const session = sessionData.session;
+            const classes = classesData.classes || [];
+
+            if ( ! session ) {
+                HT.utils.toast( 'Không tìm thấy thông tin buổi học.', 'error' );
+                return;
+            }
+
+            // Load học sinh của lớp hiện tại để render danh sách chọn
+            let classStudents = [];
+            try {
+                const classDetail = await HT.api.call( 'hinteach_class_get', { class_id: session.class_id }, 'GET' );
+                classStudents = classDetail.students || [];
+            } catch ( e ) {
+                classStudents = ( session.students || [] ).map( s => ( { id: s.student_id, name: s.name } ) );
+            }
+
+            HT.modal.open( {
+                title: 'Chỉnh sửa buổi học',
+                body: this._buildEditFormHtml( classes, session, classStudents ),
+                footer: `
+                    <button type="button" class="ht-btn ht-btn--danger ht-btn--ghost" id="ht-session-form-delete" style="margin-right:auto;">Xoá buổi</button>
+                    <button type="button" class="ht-btn ht-btn--secondary" id="ht-session-form-cancel">Huỷ</button>
+                    <button type="button" class="ht-btn ht-btn--primary" id="ht-session-form-update">Lưu thay đổi</button>
+                `,
+            } );
+
+            // Bind events
+            document.getElementById( 'ht-session-form-cancel' )
+                ?.addEventListener( 'click', () => HT.modal.close() );
+            document.getElementById( 'ht-session-form-update' )
+                ?.addEventListener( 'click', () => this._updateSession( session ) );
+            document.getElementById( 'ht-session-form-delete' )
+                ?.addEventListener( 'click', () => this._deleteSession( session ) );
+            document.getElementById( 'ht-sf-class' )
+                ?.addEventListener( 'change', ( e ) => this._onClassChange( e.target.value ) );
+            document.querySelectorAll( 'input[name="type"]' ).forEach( r => {
+                r.addEventListener( 'change', () => this._onTypeChange() );
+            } );
+            document.getElementById( 'ht-sf-color-toggle' )
+                ?.addEventListener( 'change', ( e ) => {
+                    const colorInput = document.getElementById( 'ht-sf-color' );
+                    if ( colorInput ) colorInput.disabled = ! e.target.checked;
+                } );
+        } catch ( err ) {
+            HT.utils.toast( 'Không thể tải thông tin buổi học: ' + err.message, 'error' );
+        }
+    },
+
+    /**
+     * Build HTML form chỉnh sửa buổi học.
+     *
+     * @param {Array} classes
+     * @param {Object} session
+     * @param {Array} classStudents
+     * @returns {string} HTML string
+     */
+    _buildEditFormHtml( classes, session, classStudents ) {
+        const assignedStudentIds = ( session.students || [] ).map( s => parseInt( s.student_id, 10 ) );
+        const isRecurring        = !! session.repeat_group_id;
+        const followingCount     = session.following_count || 0;
+        const hasCustomColor     = !! session.display_color;
+        const startTime          = session.start_time ? session.start_time.slice( 0, 5 ) : '';
+        const endTime            = session.end_time ? session.end_time.slice( 0, 5 ) : '';
+
+        const typeHint = session.type === 'riêng' ? '(chọn 1)' : '(chọn ít nhất 2)';
+
+        const recurringNotice = isRecurring && followingCount > 0
+            ? `<div class="ht-form__note" style="margin-bottom:14px;padding:8px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--ht-radius-sm);color:#166534;">
+                 Buổi học thuộc chuỗi lặp (còn <strong>${followingCount}</strong> buổi tiếp theo). Khi lưu, bạn có thể chọn áp dụng cho riêng buổi này hoặc toàn bộ các buổi sau.
+               </div>`
+            : '';
+
+        return `
+            <form id="ht-session-form" class="ht-form">
+                ${recurringNotice}
+                <fieldset class="ht-form__fieldset">
+                    <legend>Lớp học</legend>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label" for="ht-sf-class">Lớp *</label>
+                        <select id="ht-sf-class" name="class_id" class="ht-form__select" required>
+                            <option value="">-- Chọn lớp --</option>
+                            ${classes.map( c => `
+                                <option value="${c.id}" data-fee="${c.fee_amount || 0}" ${Number( c.id ) === Number( session.class_id ) ? 'selected' : ''}>
+                                    ${HT.utils.escapeHtml( c.name )}
+                                </option>
+                            ` ).join( '' )}
+                        </select>
+                    </div>
+                </fieldset>
+
+                <fieldset class="ht-form__fieldset">
+                    <legend>Thời gian</legend>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label" for="ht-sf-date">Ngày *</label>
+                        <input type="date" id="ht-sf-date" name="date" class="ht-form__input" required value="${session.date}" />
+                    </div>
+                    <div class="ht-form__row">
+                        <div class="ht-form__row-half">
+                            <label class="ht-form__label" for="ht-sf-start">Bắt đầu *</label>
+                            <input type="time" id="ht-sf-start" name="start_time" class="ht-form__input" required value="${startTime}" />
+                        </div>
+                        <div class="ht-form__row-half">
+                            <label class="ht-form__label" for="ht-sf-end">Kết thúc *</label>
+                            <input type="time" id="ht-sf-end" name="end_time" class="ht-form__input" required value="${endTime}" />
+                        </div>
+                    </div>
+                </fieldset>
+
+                <fieldset class="ht-form__fieldset">
+                    <legend>Loại buổi & Học sinh</legend>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label">Loại buổi *</label>
+                        <div class="ht-form__radio-group">
+                            <label><input type="radio" name="type" value="riêng" ${session.type === 'riêng' ? 'checked' : ''} /> Riêng (1-1)</label>
+                            <label><input type="radio" name="type" value="chung" ${session.type === 'chung' ? 'checked' : ''} /> Chung (nhóm)</label>
+                        </div>
+                    </div>
+                    <div class="ht-form__row" id="ht-sf-students-container">
+                        <label class="ht-form__label">Học sinh * ${typeHint}</label>
+                        <div class="ht-multi-select" id="ht-sf-students">
+                            ${classStudents.map( s => `
+                                <label class="ht-multi-select__item">
+                                    <input type="checkbox" name="student_ids" value="${s.id}" ${assignedStudentIds.includes( parseInt( s.id, 10 ) ) ? 'checked' : ''} />
+                                    <span>${HT.utils.escapeHtml( s.name )}</span>
+                                </label>
+                            ` ).join( '' )}
+                        </div>
+                    </div>
+                </fieldset>
+
+                <fieldset class="ht-form__fieldset">
+                    <legend>Chi tiết</legend>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label" for="ht-sf-price">Học phí buổi</label>
+                        <input type="number" id="ht-sf-price" name="price" class="ht-form__input" min="0" step="1000" value="${session.price || 0}" />
+                    </div>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label" for="ht-sf-name">Tên buổi học</label>
+                        <input type="text" id="ht-sf-name" name="session_name" class="ht-form__input" placeholder="(Tuỳ chọn)" value="${HT.utils.escapeHtml( session.session_name || '' )}" />
+                    </div>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label" for="ht-sf-content">Nội dung buổi học</label>
+                        <textarea id="ht-sf-content" name="content" class="ht-form__textarea" rows="2" placeholder="(Tuỳ chọn)">${HT.utils.escapeHtml( session.content || '' )}</textarea>
+                    </div>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label" for="ht-sf-homework">Nội dung bài tập về nhà</label>
+                        <textarea id="ht-sf-homework" name="homework_content" class="ht-form__textarea" rows="2" placeholder="(Tuỳ chọn)">${HT.utils.escapeHtml( session.homework_content || '' )}</textarea>
+                    </div>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label" for="ht-sf-comment">Nhận xét chung</label>
+                        <textarea id="ht-sf-comment" name="general_comment" class="ht-form__textarea" rows="2" placeholder="(Tuỳ chọn)">${HT.utils.escapeHtml( session.general_comment || '' )}</textarea>
+                    </div>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label">Màu hiển thị</label>
+                        <div class="ht-form__inline-group">
+                            <label class="ht-form__checkbox-inline">
+                                <input type="checkbox" id="ht-sf-color-toggle" ${hasCustomColor ? 'checked' : ''} /> Dùng màu riêng
+                            </label>
+                            <input type="color" id="ht-sf-color" name="display_color"
+                                   class="ht-form__input ht-form__input--color" value="${session.display_color || '#4A90D9'}" ${hasCustomColor ? '' : 'disabled'} />
+                        </div>
+                    </div>
+                </fieldset>
+            </form>
+        `;
+    },
+
+    /**
+     * Modal chọn scope (single / following) cho buổi lặp.
+     *
+     * @param {string} actionText    'cập nhật' | 'xoá'
+     * @param {number} followingCount Số buổi sau
+     * @returns {Promise<'single'|'following'|null>}
+     */
+    _askScope( actionText = 'cập nhật', followingCount = 0 ) {
+        return new Promise( ( resolve ) => {
+            let resolved = false;
+            const totalFollowing = followingCount + 1;
+
+            HT.modal.open( {
+                title: `Tuỳ chọn ${actionText} buổi học`,
+                body: `
+                    <p style="margin-bottom:16px;">Buổi học này thuộc một chuỗi lặp. Bạn muốn ${actionText} như thế nào?</p>
+                    <div class="ht-scope-choices">
+                        <button type="button" class="ht-scope-choice" id="ht-scope-single">
+                            <span class="ht-scope-choice__title">Chỉ buổi này</span>
+                            <span class="ht-scope-choice__desc">Chỉ áp dụng ${actionText} cho riêng buổi học này.</span>
+                        </button>
+                        <button type="button" class="ht-scope-choice" id="ht-scope-following">
+                            <span class="ht-scope-choice__title">Buổi này và các buổi sau (${totalFollowing} buổi)</span>
+                            <span class="ht-scope-choice__desc">Áp dụng ${actionText} cho buổi này cùng toàn bộ các buổi tiếp theo trong chuỗi.</span>
+                        </button>
+                    </div>
+                `,
+                footer: `
+                    <button type="button" class="ht-btn ht-btn--ghost" id="ht-scope-cancel">Huỷ</button>
+                `,
+                onClose: () => {
+                    if ( resolved ) return;
+                    resolved = true;
+                    resolve( null );
+                },
+            } );
+
+            document.getElementById( 'ht-scope-single' )?.addEventListener( 'click', () => {
+                resolved = true;
+                HT.modal.close();
+                resolve( 'single' );
+            } );
+
+            document.getElementById( 'ht-scope-following' )?.addEventListener( 'click', () => {
+                resolved = true;
+                HT.modal.close();
+                resolve( 'following' );
+            } );
+
+            document.getElementById( 'ht-scope-cancel' )?.addEventListener( 'click', () => {
+                resolved = true;
+                HT.modal.close();
+                resolve( null );
+            } );
+        } );
+    },
+
+    /**
+     * Submit cập nhật buổi học.
+     *
+     * @param {Object} currentSession
+     */
+    async _updateSession( currentSession ) {
+        const form = document.getElementById( 'ht-session-form' );
+        if ( ! form ) return;
+
+        const classId   = form.querySelector( '[name="class_id"]' )?.value || '';
+        const date      = form.querySelector( '[name="date"]' )?.value || '';
+        const startTime = form.querySelector( '[name="start_time"]' )?.value || '';
+        const endTime   = form.querySelector( '[name="end_time"]' )?.value || '';
+        const type      = form.querySelector( 'input[name="type"]:checked' )?.value || '';
+        const price     = form.querySelector( '[name="price"]' )?.value || '0';
+        const sessName  = form.querySelector( '[name="session_name"]' )?.value || '';
+        const content   = form.querySelector( '[name="content"]' )?.value || '';
+        const homework  = form.querySelector( '[name="homework_content"]' )?.value || '';
+        const comment   = form.querySelector( '[name="general_comment"]' )?.value || '';
+
+        const colorToggle  = document.getElementById( 'ht-sf-color-toggle' );
+        const displayColor = colorToggle?.checked
+            ? ( form.querySelector( '[name="display_color"]' )?.value || '' )
+            : '';
+
+        const studentCheckboxes = form.querySelectorAll( 'input[name="student_ids"]:checked' );
+        const studentIds = Array.from( studentCheckboxes ).map( cb => cb.value );
+
+        // Validate
+        if ( ! classId ) { HT.utils.toast( 'Vui lòng chọn lớp.', 'error' ); return; }
+        if ( ! date )    { HT.utils.toast( 'Vui lòng chọn ngày.', 'error' ); return; }
+        if ( ! startTime || ! endTime ) {
+            HT.utils.toast( 'Vui lòng nhập giờ bắt đầu và kết thúc.', 'error' ); return;
+        }
+        if ( startTime >= endTime ) {
+            HT.utils.toast( 'Giờ bắt đầu phải trước giờ kết thúc.', 'error' ); return;
+        }
+        if ( ! type ) { HT.utils.toast( 'Vui lòng chọn loại buổi.', 'error' ); return; }
+        if ( type === 'riêng' && studentIds.length !== 1 ) {
+            HT.utils.toast( 'Buổi riêng phải chọn đúng 1 học sinh.', 'error' ); return;
+        }
+        if ( type === 'chung' && studentIds.length < 2 ) {
+            HT.utils.toast( 'Buổi chung phải chọn ít nhất 2 học sinh.', 'error' ); return;
+        }
+
+        // Scope
+        let scope = 'single';
+        if ( currentSession.repeat_group_id && currentSession.following_count > 0 ) {
+            scope = await this._askScope( 'cập nhật', currentSession.following_count );
+            if ( ! scope ) {
+                return; // User cancelled
+            }
+        }
+
+        const payload = {
+            session_id:       currentSession.id,
+            update_scope:     scope,
+            class_id:         classId,
+            date:             date,
+            start_time:       startTime,
+            end_time:         endTime,
+            type:             type,
+            student_ids:      studentIds,
+            price:            price,
+            session_name:     sessName,
+            content:          content,
+            homework_content: homework,
+            general_comment:  comment,
+            display_color:    displayColor,
+        };
+
+        try {
+            const updateBtn = document.getElementById( 'ht-session-form-update' );
+            if ( updateBtn ) { updateBtn.disabled = true; updateBtn.textContent = 'Đang lưu...'; }
+
+            const result = await HT.api.call( 'hinteach_session_save', payload );
+            HT.modal.close();
+
+            if ( result.scope === 'following' && result.updated_count ) {
+                HT.utils.toast( `Đã cập nhật ${result.updated_count} buổi trong chuỗi lặp.` );
+            } else {
+                HT.utils.toast( result.message || 'Đã cập nhật buổi học thành công.' );
+            }
+            await this._render();
+        } catch ( err ) {
+            if ( err.status === 409 && err.serverData?.conflict ) {
+                const c = err.serverData.conflict;
+                const conflictName = c.session_name
+                    ? `"${HT.utils.escapeHtml( c.session_name )}"`
+                    : 'buổi học';
+                const conflictTime = `${this._fmtTime( c.start_time )} – ${this._fmtTime( c.end_time )}`;
+                HT.utils.toast(
+                    `Trùng lịch với ${conflictName} lúc ${conflictTime} ngày ${this._fmtShort( c.date )}.`,
+                    'error'
+                );
+            } else {
+                HT.utils.toast( err.message, 'error' );
+            }
+            const updateBtn = document.getElementById( 'ht-session-form-update' );
+            if ( updateBtn ) { updateBtn.disabled = false; updateBtn.textContent = 'Lưu thay đổi'; }
+        }
+    },
+
+    /**
+     * Xoá buổi học (single hoặc following).
+     *
+     * @param {Object} currentSession
+     */
+    async _deleteSession( currentSession ) {
+        let scope = 'single';
+        if ( currentSession.repeat_group_id && currentSession.following_count > 0 ) {
+            scope = await this._askScope( 'xoá', currentSession.following_count );
+            if ( ! scope ) {
+                return;
+            }
+        }
+
+        const confirmMsg = scope === 'following'
+            ? `Bạn có chắc chắn muốn xoá buổi học này và ${currentSession.following_count} buổi tiếp theo trong chuỗi lặp?`
+            : 'Bạn có chắc chắn muốn xoá buổi học này?';
+
+        const confirmed = await HT.modal.confirm( confirmMsg );
+        if ( ! confirmed ) return;
+
+        try {
+            const result = await HT.api.call( 'hinteach_session_delete', {
+                session_id: currentSession.id,
+                scope:      scope,
+            } );
+
+            HT.modal.close();
+
+            if ( result.scope === 'following' && result.deleted_count ) {
+                HT.utils.toast( `Đã xoá ${result.deleted_count} buổi trong chuỗi lặp.` );
+            } else {
+                HT.utils.toast( result.message || 'Đã xoá buổi học.' );
+            }
+
+            await this._render();
+        } catch ( err ) {
+            HT.utils.toast( err.message, 'error' );
         }
     },
 };
