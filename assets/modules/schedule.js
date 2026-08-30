@@ -270,6 +270,9 @@ const ScheduleModule = {
             `,
         } );
 
+        // Internal state for repeat dates
+        this._repeatDates = [];
+
         // Bind events
         document.getElementById( 'ht-session-form-cancel' )
             ?.addEventListener( 'click', () => HT.modal.close() );
@@ -285,6 +288,36 @@ const ScheduleModule = {
                 const colorInput = document.getElementById( 'ht-sf-color' );
                 if ( colorInput ) colorInput.disabled = ! e.target.checked;
             } );
+
+        // M3: Recurrence event bindings
+        document.getElementById( 'ht-sf-repeat-toggle' )
+            ?.addEventListener( 'change', ( e ) => {
+                const panel = document.getElementById( 'ht-sf-repeat-panel' );
+                if ( panel ) panel.style.display = e.target.checked ? '' : 'none';
+                if ( ! e.target.checked ) {
+                    this._repeatDates = [];
+                    this._renderRepeatChips();
+                }
+            } );
+        document.querySelectorAll( 'input[name="repeat_mode"]' ).forEach( r => {
+            r.addEventListener( 'change', () => this._onRecurrenceChange() );
+        } );
+        document.getElementById( 'ht-sf-repeat-until' )
+            ?.addEventListener( 'change', () => this._onRecurrenceChange() );
+        document.querySelectorAll( '.ht-weekday-btn' ).forEach( btn => {
+            btn.addEventListener( 'click', () => {
+                btn.classList.toggle( 'ht-weekday-btn--active' );
+                this._onRecurrenceChange();
+            } );
+        } );
+        document.getElementById( 'ht-sf-repeat-gen' )
+            ?.addEventListener( 'click', () => this._onRecurrenceChange() );
+        document.getElementById( 'ht-sf-custom-date' )
+            ?.addEventListener( 'keydown', ( e ) => {
+                if ( e.key === 'Enter' ) { e.preventDefault(); this._addCustomRepeatDate(); }
+            } );
+        document.getElementById( 'ht-sf-custom-add' )
+            ?.addEventListener( 'click', () => this._addCustomRepeatDate() );
     },
 
     /**
@@ -359,6 +392,56 @@ const ScheduleModule = {
                             </label>
                             <input type="color" id="ht-sf-color" name="display_color"
                                    class="ht-form__input ht-form__input--color" value="#4A90D9" disabled />
+                        </div>
+                    </div>
+                </fieldset>
+
+                <fieldset class="ht-form__fieldset">
+                    <legend>Lặp lịch</legend>
+                    <div class="ht-form__row">
+                        <label class="ht-form__checkbox-inline">
+                            <input type="checkbox" id="ht-sf-repeat-toggle" /> Lặp lại buổi học này
+                        </label>
+                    </div>
+                    <div id="ht-sf-repeat-panel" style="display:none">
+                        <div class="ht-form__row">
+                            <label class="ht-form__label">Kiểu lặp</label>
+                            <div class="ht-form__radio-group">
+                                <label><input type="radio" name="repeat_mode" value="daily" checked /> Hằng ngày</label>
+                                <label><input type="radio" name="repeat_mode" value="weekly" /> Hằng tuần</label>
+                                <label><input type="radio" name="repeat_mode" value="monthly" /> Hằng tháng</label>
+                                <label><input type="radio" name="repeat_mode" value="custom" /> Tuỳ chọn</label>
+                            </div>
+                        </div>
+                        <div class="ht-form__row" id="ht-sf-repeat-until-row">
+                            <label class="ht-form__label" for="ht-sf-repeat-until">Lặp đến ngày</label>
+                            <input type="date" id="ht-sf-repeat-until" class="ht-form__input" />
+                        </div>
+                        <div class="ht-form__row" id="ht-sf-weekday-row" style="display:none">
+                            <label class="ht-form__label">Các thứ trong tuần</label>
+                            <div class="ht-weekday-picker">
+                                <button type="button" class="ht-weekday-btn" data-day="1">T2</button>
+                                <button type="button" class="ht-weekday-btn" data-day="2">T3</button>
+                                <button type="button" class="ht-weekday-btn" data-day="3">T4</button>
+                                <button type="button" class="ht-weekday-btn" data-day="4">T5</button>
+                                <button type="button" class="ht-weekday-btn" data-day="5">T6</button>
+                                <button type="button" class="ht-weekday-btn" data-day="6">T7</button>
+                                <button type="button" class="ht-weekday-btn" data-day="0">CN</button>
+                            </div>
+                        </div>
+                        <div class="ht-form__row" id="ht-sf-custom-row" style="display:none">
+                            <label class="ht-form__label">Thêm ngày thủ công</label>
+                            <div class="ht-form__inline-group">
+                                <input type="date" id="ht-sf-custom-date" class="ht-form__input" />
+                                <button type="button" class="ht-btn ht-btn--ghost" id="ht-sf-custom-add">+ Thêm</button>
+                            </div>
+                        </div>
+                        <div class="ht-form__row" id="ht-sf-repeat-gen-row">
+                            <button type="button" class="ht-btn ht-btn--ghost" id="ht-sf-repeat-gen">Tạo danh sách ngày lặp</button>
+                        </div>
+                        <div class="ht-form__row">
+                            <label class="ht-form__label">Ngày lặp (<span id="ht-sf-repeat-count">0</span> ngày)</label>
+                            <div id="ht-sf-repeat-chips" class="ht-chip-list"></div>
                         </div>
                     </div>
                 </fieldset>
@@ -454,9 +537,222 @@ const ScheduleModule = {
         }
     },
 
+    // ──────────────────────────────────────────────────────────
+    // M3: Recurrence helpers
+    // ──────────────────────────────────────────────────────────
+
+    /**
+     * Xử lý khi thay đổi mode lặp hoặc nhấn "Tạo danh sách ngày lặp".
+     * Sinh repeat_dates theo mode (daily/weekly/monthly), render chips.
+     * Custom mode không tự sinh — user thêm tay.
+     */
+    _onRecurrenceChange() {
+        const mode = document.querySelector( 'input[name="repeat_mode"]:checked' )?.value || 'daily';
+
+        // Show/hide UI elements based on mode
+        const untilRow   = document.getElementById( 'ht-sf-repeat-until-row' );
+        const weekdayRow = document.getElementById( 'ht-sf-weekday-row' );
+        const customRow  = document.getElementById( 'ht-sf-custom-row' );
+        const genRow     = document.getElementById( 'ht-sf-repeat-gen-row' );
+
+        if ( untilRow )   untilRow.style.display   = mode === 'custom' ? 'none' : '';
+        if ( weekdayRow ) weekdayRow.style.display  = mode === 'weekly' ? '' : 'none';
+        if ( customRow )  customRow.style.display   = mode === 'custom' ? '' : 'none';
+        if ( genRow )     genRow.style.display      = mode === 'custom' ? 'none' : '';
+
+        // For non-custom modes, generate dates
+        if ( mode !== 'custom' ) {
+            const baseDate = document.getElementById( 'ht-sf-date' )?.value || '';
+            const until    = document.getElementById( 'ht-sf-repeat-until' )?.value || '';
+
+            if ( ! baseDate || ! until ) return;
+            if ( until <= baseDate ) {
+                HT.utils.toast( 'Ngày kết thúc lặp phải sau ngày gốc.', 'error' );
+                return;
+            }
+
+            let selectedWeekdays = [];
+            if ( mode === 'weekly' ) {
+                selectedWeekdays = Array.from(
+                    document.querySelectorAll( '.ht-weekday-btn--active' )
+                ).map( btn => parseInt( btn.dataset.day, 10 ) );
+
+                if ( ! selectedWeekdays.length ) {
+                    HT.utils.toast( 'Vui lòng chọn ít nhất 1 thứ trong tuần.', 'error' );
+                    return;
+                }
+            }
+
+            this._repeatDates = this._generateRepeatDates( mode, baseDate, until, selectedWeekdays );
+            this._renderRepeatChips();
+        }
+    },
+
+    /**
+     * Sinh mảng ngày lặp dựa trên mode.
+     *
+     * @param {string} mode          'daily' | 'weekly' | 'monthly'
+     * @param {string} startDate     YYYY-MM-DD (base date)
+     * @param {string} until         YYYY-MM-DD (end date)
+     * @param {number[]} weekdays    Mảng thứ (0=CN,1=T2,...6=T7) — chỉ dùng cho weekly
+     * @returns {string[]}           Mảng YYYY-MM-DD, đã sort, slice(0, 365)
+     */
+    _generateRepeatDates( mode, startDate, until, weekdays ) {
+        const dates = [];
+        const start = new Date( startDate + 'T00:00:00' );
+        const end   = new Date( until + 'T00:00:00' );
+
+        if ( mode === 'daily' ) {
+            const cursor = new Date( start );
+            cursor.setDate( cursor.getDate() + 1 ); // Bắt đầu từ ngày sau base
+            while ( cursor <= end && dates.length < 365 ) {
+                dates.push( this._toIso( cursor ) );
+                cursor.setDate( cursor.getDate() + 1 );
+            }
+        } else if ( mode === 'weekly' ) {
+            const cursor = new Date( start );
+            cursor.setDate( cursor.getDate() + 1 );
+            while ( cursor <= end && dates.length < 365 ) {
+                if ( weekdays.includes( cursor.getDay() ) ) {
+                    dates.push( this._toIso( cursor ) );
+                }
+                cursor.setDate( cursor.getDate() + 1 );
+            }
+        } else if ( mode === 'monthly' ) {
+            // Lặp cùng thứ-occurrence trong tháng (vd: thứ 3 tuần thứ 2)
+            const baseDay       = start.getDay(); // 0-6
+            const baseOccurrence = Math.ceil( start.getDate() / 7 ); // Occurrence 1-5
+
+            let month = start.getMonth();
+            let year  = start.getFullYear();
+
+            while ( dates.length < 365 ) {
+                month++;
+                if ( month > 11 ) { month = 0; year++; }
+
+                const candidate = this._nthWeekdayOfMonth( year, month, baseDay, baseOccurrence );
+                if ( ! candidate ) continue;
+                if ( candidate > this._toIso( end ) ) break;
+                if ( candidate <= startDate ) continue;
+
+                dates.push( candidate );
+            }
+        }
+
+        // Dedupe (Set), sort, slice(0, 365) — v3 fix
+        const unique = [ ...new Set( dates ) ];
+        unique.sort();
+        return unique.slice( 0, 365 );
+    },
+
+    /**
+     * Tìm ngày thứ N-th weekday trong tháng.
+     * VD: thứ 3 (Wednesday) tuần thứ 2 của tháng 9/2026.
+     * Nếu occurrence vượt quá số tuần trong tháng → fallback lùi về occurrence cuối.
+     *
+     * @param {number} year
+     * @param {number} month       0-11
+     * @param {number} weekday     0=CN, 1=T2, ..., 6=T7
+     * @param {number} occurrence  1-5
+     * @returns {string|null}      'YYYY-MM-DD' hoặc null
+     */
+    _nthWeekdayOfMonth( year, month, weekday, occurrence ) {
+        // Tìm ngày đầu tiên trong tháng có đúng weekday
+        const firstDay = new Date( year, month, 1 );
+        let firstOccurrence = 1 + ( ( weekday - firstDay.getDay() + 7 ) % 7 );
+
+        // Tính ngày target
+        let targetDate = firstOccurrence + ( occurrence - 1 ) * 7;
+
+        // Số ngày trong tháng
+        const daysInMonth = new Date( year, month + 1, 0 ).getDate();
+
+        // Fallback: nếu vượt quá → lùi về occurrence cuối cùng
+        while ( targetDate > daysInMonth ) {
+            targetDate -= 7;
+        }
+
+        if ( targetDate < 1 ) return null;
+
+        const d = new Date( year, month, targetDate );
+        return this._toIso( d );
+    },
+
+    /**
+     * Render chip list preview cho repeat_dates.
+     */
+    _renderRepeatChips() {
+        const container = document.getElementById( 'ht-sf-repeat-chips' );
+        const countEl   = document.getElementById( 'ht-sf-repeat-count' );
+        if ( ! container ) return;
+
+        if ( countEl ) countEl.textContent = this._repeatDates.length;
+
+        if ( ! this._repeatDates.length ) {
+            container.innerHTML = '<p class="ht-form__note">Chưa có ngày lặp nào.</p>';
+            return;
+        }
+
+        container.innerHTML = this._repeatDates.map( d => `
+            <span class="ht-chip">
+                ${this._fmtShort( d )}
+                <button type="button" class="ht-chip__remove" data-date="${d}">&times;</button>
+            </span>
+        ` ).join( '' );
+
+        // Bind remove events
+        container.querySelectorAll( '.ht-chip__remove' ).forEach( btn => {
+            btn.addEventListener( 'click', () => this._removeRepeatDate( btn.dataset.date ) );
+        } );
+    },
+
+    /**
+     * Xoá 1 ngày khỏi repeat_dates và re-render chips.
+     * @param {string} dateStr  YYYY-MM-DD
+     */
+    _removeRepeatDate( dateStr ) {
+        this._repeatDates = this._repeatDates.filter( d => d !== dateStr );
+        this._renderRepeatChips();
+    },
+
+    /**
+     * Thêm 1 ngày thủ công vào repeat_dates (custom mode).
+     */
+    _addCustomRepeatDate() {
+        const input    = document.getElementById( 'ht-sf-custom-date' );
+        const baseDate = document.getElementById( 'ht-sf-date' )?.value || '';
+        if ( ! input || ! input.value ) {
+            HT.utils.toast( 'Vui lòng chọn ngày.', 'error' );
+            return;
+        }
+
+        const newDate = input.value;
+
+        if ( newDate <= baseDate ) {
+            HT.utils.toast( 'Ngày lặp phải sau ngày gốc (' + this._fmtShort( baseDate ) + ').', 'error' );
+            return;
+        }
+
+        if ( this._repeatDates.includes( newDate ) ) {
+            HT.utils.toast( 'Ngày này đã có trong danh sách.', 'error' );
+            return;
+        }
+
+        if ( this._repeatDates.length >= 365 ) {
+            HT.utils.toast( 'Đã đạt giới hạn 365 ngày lặp.', 'error' );
+            return;
+        }
+
+        this._repeatDates.push( newDate );
+        this._repeatDates.sort();
+        this._renderRepeatChips();
+        input.value = '';
+    },
+
     /**
      * Submit form tạo buổi học.
      * Client-side validate → gọi API → xử lý conflict 409 / success.
+     * M3: nếu có repeat_dates → gọi hinteach_session_save_recurring.
      */
     async _saveSession() {
         const form = document.getElementById( 'ht-session-form' );
@@ -481,6 +777,10 @@ const ScheduleModule = {
         const studentCheckboxes = form.querySelectorAll( 'input[name="student_ids"]:checked' );
         const studentIds = Array.from( studentCheckboxes ).map( cb => cb.value );
 
+        // M3: Repeat dates
+        const repeatToggle = document.getElementById( 'ht-sf-repeat-toggle' );
+        const isRecurring  = repeatToggle?.checked && this._repeatDates && this._repeatDates.length > 0;
+
         // ── Client-side validate ───────────────────────────
         if ( ! classId ) { HT.utils.toast( 'Vui lòng chọn lớp.', 'error' ); return; }
         if ( ! date )    { HT.utils.toast( 'Vui lòng chọn ngày.', 'error' ); return; }
@@ -498,6 +798,11 @@ const ScheduleModule = {
             HT.utils.toast( 'Buổi chung phải chọn ít nhất 2 học sinh.', 'error' ); return;
         }
 
+        // M3: validate recurring
+        if ( isRecurring && this._repeatDates.length > 365 ) {
+            HT.utils.toast( 'Số ngày lặp tối đa là 365.', 'error' ); return;
+        }
+
         // Payload
         const payload = {
             class_id:      classId,
@@ -511,13 +816,27 @@ const ScheduleModule = {
             display_color: displayColor,
         };
 
+        // M3: Thêm repeat_dates nếu recurring
+        if ( isRecurring ) {
+            payload.repeat_dates = this._repeatDates;
+        }
+
+        // Chọn action: recurring (M3) hay single (M2)
+        const action = isRecurring ? 'hinteach_session_save_recurring' : 'hinteach_session_save';
+        const btnLabel = isRecurring ? 'Tạo buổi lặp' : 'Tạo buổi';
+
         try {
             const saveBtn = document.getElementById( 'ht-session-form-save' );
             if ( saveBtn ) { saveBtn.disabled = true; saveBtn.textContent = 'Đang tạo...'; }
 
-            await HT.api.call( 'hinteach_session_save', payload );
+            const result = await HT.api.call( action, payload );
             HT.modal.close();
-            HT.utils.toast( 'Đã tạo buổi học thành công.' );
+
+            if ( isRecurring && result.created_count ) {
+                HT.utils.toast( `Đã tạo ${result.created_count} buổi học thành công.` );
+            } else {
+                HT.utils.toast( 'Đã tạo buổi học thành công.' );
+            }
             await this._render(); // Refresh calendar
         } catch ( err ) {
             // Xử lý conflict 409 với structured payload
@@ -535,7 +854,7 @@ const ScheduleModule = {
                 HT.utils.toast( err.message, 'error' );
             }
             const saveBtn = document.getElementById( 'ht-session-form-save' );
-            if ( saveBtn ) { saveBtn.disabled = false; saveBtn.textContent = 'Tạo buổi'; }
+            if ( saveBtn ) { saveBtn.disabled = false; saveBtn.textContent = btnLabel; }
         }
     },
 };
