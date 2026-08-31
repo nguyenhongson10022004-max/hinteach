@@ -1,8 +1,8 @@
 # Specification — Thời khoá biểu / Buổi học
 
-> Module: Schedule | Status: **IN PROGRESS** (GĐ3 — M1–M6 ✅ completed, M7 ⏳ chưa bắt đầu)
+> Module: Schedule | Status: **IN PROGRESS** (GĐ3 — M1–M7 ✅ completed, M8 planned)
 > Xem `STATUS.md` cho trạng thái hiện tại.
-> Spec cập nhật: 2026-08-31 — cập nhật Mục 18 (M6 Calendar Actions, từ HAR 3.13–3.17), thêm Mục 19 (M7 Calendar Interaction, từ HAR 3.17–3.18), cập nhật edge cases Mục 15 và roadmap.
+> Spec cập nhật: 2026-08-31 — cập nhật Mục 19 (M7 Calendar Interaction — COMPLETED, implementation + verification), cập nhật edge cases Mục 15 và roadmap.
 > Nguồn ưu tiên: HAR thực tế > quyết định thiết kế HinTeach > spec cũ.
 
 ---
@@ -588,9 +588,10 @@ dựa trên quyết định thiết kế nội bộ, không phụ thuộc behavi
 | Duplicate: mở form prefill hay tạo ngay | **[HAR CONFIRMED + BUNDLE CONFIRMED]** — Tạo session mới trực tiếp sau khi tìm slot trống, không mở form — xem Mục 18 |
 | Recurrence khi copy/paste/duplicate (có tạo group mới không) | **[HAR CONFIRMED + BUNDLE CONFIRMED]** — Copy/Paste không giữ `recurrenceGroupId` của session gốc; Duplicate không giữ `recurrenceGroupId` của session gốc. **[HINTEACH DESIGN DECISION]** Các session tạo từ copy/paste/duplicate là session độc lập — xem Mục 18 |
 | Conflict handling khi paste/duplicate trùng lịch | **[CHƯA XÁC NHẬN]** — xem Mục 18 |
-| Drag move recurrence scope (có hỏi single/following không) | **[CHƯA XÁC NHẬN]** — xem Mục 19 |
+| Drag move recurrence scope (có hỏi single/following không) | **[HINTEACH DESIGN DECISION — RESOLVED trong M7]** — Có hỏi `updateScope` (single/following), reuse dialog scope Mục 7 — xem Mục 19 |
 | Drag create save behavior | **[HAR CONFIRMED — HAR 3.18]** — mở create form, prefill thời gian, không auto-create — xem Mục 19 |
-| Resize session | **[CHƯA XÁC NHẬN]** — chưa có HAR, không implement trong M7 — xem Mục 19 |
+| Drag move conflict handling | **[HINTEACH DESIGN DECISION — RESOLVED trong M7]** — Server trả 409, client rollback vị trí cũ trên UI — xem Mục 19 |
+| Resize session | **[CHƯA XÁC NHẬN]** — chưa có HAR, không implement, chuyển sang GĐ3 M8 nếu có nhu cầu — xem Mục 19 |
 
 ---
 
@@ -627,11 +628,15 @@ dựa trên quyết định thiết kế nội bộ, không phụ thuộc behavi
 - [ ] Xoá buổi `billing_mode='monthly'` → học phí KHÔNG đổi **[CHƯA XÁC NHẬN — giữ rule]**
 - [ ] Quick-entry: chỉ cập nhật đúng `sessionId` đang mở, không propagate sang following **[HINTEACH DESIGN DECISION]**
 - [ ] Quick-entry: lưu journal + `scoreGroups` → server tạo score records gắn `sessionId` **[HAR CONFIRMED]**
-- [ ] Đổi màu (action riêng, tự implement UI): buổi trong chuỗi → current + following đổi màu theo position, buổi trước không đổi **[HAR CONFIRMED + HINTEACH IMPLEMENTATION DECISION]**
-- [ ] Đổi màu buổi đơn lẻ (không thuộc chuỗi) → chỉ buổi đó đổi
-- [ ] Context menu session (chuột phải) → hiện đúng 4 mục: Đổi màu / Sao chép / Nhân bản / Xóa **[CHƯA IMPLEMENT — xem Mục 18]**
-- [ ] Context menu vùng trống (chuột phải) → hiện đúng 2 mục: Thêm buổi học / Dán (disabled nếu chưa copy) **[CHƯA IMPLEMENT — xem Mục 18]**
-- [ ] Duplicate session → tạo flow nhân bản đúng theo Decision Log M6 **[CHƯA IMPLEMENT — xem Mục 18]**
+- [x] Đổi màu (action riêng, tự implement UI): buổi trong chuỗi → current + following đổi màu theo position, buổi trước không đổi **[HAR CONFIRMED + HINTEACH IMPLEMENTATION DECISION]** — ✅ M6
+- [x] Đổi màu buổi đơn lẻ (không thuộc chuỗi) → chỉ buổi đó đổi — ✅ M6
+- [x] Context menu session (chuột phải) → hiện đúng 4 mục: Đổi màu / Sao chép / Nhân bản / Xóa — ✅ M6, xem Mục 18
+- [x] Context menu vùng trống (chuột phải) → hiện đúng 2 mục: Thêm buổi học / Dán (disabled nếu chưa copy) — ✅ M6, xem Mục 18
+- [x] Duplicate session → tạo flow nhân bản đúng theo Decision Log M6 — ✅ M6, xem Mục 18
+- [x] Drag create: kéo vùng trống → mở create form, prefill thời gian, không auto-create **[HAR CONFIRMED — HAR 3.18]** — ✅ M7, xem Mục 19
+- [x] Drag move: kéo session → hỏi `updateScope` nếu thuộc recurrence, PUT update theo Mục 7 — ✅ M7, xem Mục 19
+- [x] Drag move conflict: vị trí mới trùng lịch → server 409, client rollback về vị trí cũ — ✅ M7, xem Mục 19
+- [ ] Resize session — **[CHƯA XÁC NHẬN]**, chuyển GĐ3 M8
 - [ ] Filter lịch — **[CHƯA XÁC NHẬN]**
 
 ---
@@ -801,10 +806,30 @@ Behavior:
 
 ## 19. Calendar Interaction — M7
 
-Nguồn:
+> Implementation status: ✅ COMPLETED
+>
+> Commit: `<commit>`
+>
+> Tag: `gd3-m7-completed`
+>
+> Manual verification:
+> - Time-grid render
+> - Drag Create
+> - Drag Move
+> - Recurrence single/following
+> - Conflict 409 rollback
+> - Regression: click edit, context menu, copy/paste, duplicate
+
+Nguồn evidence:
 
 - HAR 3.17 — drag session
 - HAR 3.18 — drag create session (kéo vùng thời gian trống để tạo nhanh buổi học)
+
+### Time-grid Calendar
+
+**[HINTEACH IMPLEMENTATION DECISION]**
+
+Calendar chuyển sang hiển thị dạng time-grid (06:00–24:00), session render dưới dạng block định vị tuyệt đối theo thời gian, để hỗ trợ thao tác kéo-thả (drag create/drag move).
 
 ### Drag Create Session
 
@@ -836,34 +861,48 @@ Behavior:
 
 - Chỉ áp dụng cho vùng trống.
 - Không thay đổi session hiện có.
+- Snap 30 phút khi kéo chọn vùng thời gian.
 
 Backend: **reuse** action tạo session đã có ở Mục 3 (`hinteach_session_save`). **Không tạo endpoint mới, không schema mới, không validation mới** — đây chỉ là UX shortcut frontend cho flow tạo buổi học đã tồn tại ở M2.
 
 ### Drag Move
 
-**[HAR CONFIRMED]**
+**[HAR CONFIRMED — HAR 3.17]**
 
 Flow:
 
 ```
 Drag session
   ↓
+Ghost block preview (snap 30 phút)
+  ↓
+Thả chuột
+  ↓
 PUT session update
 ```
 
 Reuse API sửa buổi học (Mục 7). Payload liên quan: `date`, `startTime`, `endTime`, `updateScope`.
 
-**[CHƯA XÁC NHẬN]**
+**Điểm đã xác định trong M7 implementation [HINTEACH DESIGN DECISION]:**
 
-- Drag session thuộc recurrence có hỏi `updateScope` (single/following) không.
-- Resize duration behavior.
-- Conflict handling khi kéo.
+- Drag session thuộc recurrence: hỏi `updateScope` (single/following) qua cùng dialog scope dùng ở Mục 7, không tự ý mặc định một trong hai.
+- Conflict khi kéo: nếu vị trí mới trùng lịch → server trả `409 Conflict` (đồng nhất với Mục 5), client rollback session về vị trí cũ trên UI và hiển thị thông tin conflict.
+- Duration không đổi khi drag move (chỉ dịch chuyển `date`/`startTime`/`endTime` theo cùng độ dài buổi học ban đầu) — resize (đổi duration) là tính năng riêng, xem bên dưới.
 
 ### Resize
 
-**[CHƯA XÁC NHẬN]**
+**[CHƯA XÁC NHẬN — KHÔNG IMPLEMENT TRONG M7]**
 
-Chưa có HAR xác nhận. Không implement trong M7 nếu chưa có evidence.
+Chưa có HAR xác nhận behavior resize (kéo dãn để đổi duration). Không implement trong M7; chuyển sang đánh giá lại ở GĐ3 M8 nếu có nhu cầu + evidence.
+
+### Out of scope — chuyển sang GĐ3 M8
+
+- Week/Month view switch
+- Calendar summary dashboard
+- Daily revenue summary
+- Convert single session → recurrence
+- Advanced recurrence date-shift behavior
+- Resize session
 
 ---
 
@@ -884,8 +923,16 @@ M6 ✅ Calendar Actions
     - Copy/Paste workflow
     - Duplicate session
     - Delete shortcut (reuse M4)
-M7 ⏳ Calendar Interaction
+M7 ✅ Calendar Interaction
+    - Time-grid calendar
     - Drag create (reuse M2 hinteach_session_save — no new backend)
-    - Drag move (reuse M4 edit API)
-    - Resize — CHƯA CÓ HAR, không implement
+    - Drag move (reuse M4 edit API, updateScope prompt, 409 conflict rollback)
+    - Resize — CHƯA CÓ HAR, không implement, chuyển GĐ3 M8
+M8 ⏳ Calendar Enhancement (planned)
+    - Week/Month view switch
+    - Calendar summary dashboard
+    - Daily revenue summary
+    - Convert single session → recurrence
+    - Advanced recurrence date-shift behavior
+    - Resize session (nếu có evidence)
 ```

@@ -20,8 +20,8 @@ const ScheduleModule = {
     // ── M7 Time-grid constants ─────────────────────────────────
     /** Pixel height cho mỗi giờ trong time-grid */
     HOUR_HEIGHT: 48,
-    /** Giờ bắt đầu hiển thị (07:00) */
-    DAY_START_HOUR: 7,
+    /** Giờ bắt đầu hiển thị (06:00) */
+    DAY_START_HOUR: 6,
     /** Giờ kết thúc hiển thị (24:00) */
     DAY_END_HOUR: 24,
     /** Snap đơn vị phút khi kéo */
@@ -52,7 +52,7 @@ const ScheduleModule = {
      * Render module vào container.
      * @param {HTMLElement} container
      */
-    async render( container ) {
+    async render(container) {
         // Reset về tuần hiện tại mỗi lần mount tab
         this._currentDate = new Date();
         this._dismissContextMenu();
@@ -68,8 +68,8 @@ const ScheduleModule = {
         `;
 
         // Bind sự kiện tạo buổi
-        document.getElementById( 'ht-session-add' )
-            ?.addEventListener( 'click', () => this._openCreateForm() );
+        document.getElementById('ht-session-add')
+            ?.addEventListener('click', () => this._openCreateForm());
 
         await this._render();
     },
@@ -83,20 +83,20 @@ const ScheduleModule = {
      * Gọi API hinteach_session_list để lấy sessions trong khoảng tuần.
      */
     async _render() {
-        const cal = document.getElementById( 'ht-schedule-calendar' );
-        if ( ! cal ) return;
+        const cal = document.getElementById('ht-schedule-calendar');
+        if (!cal) return;
 
         this._dismissContextMenu();
-        const week = this._getWeekRange( this._currentDate );
+        const week = this._getWeekRange(this._currentDate);
 
         try {
-            const sessions = await this._loadSessions( week.fromStr, week.toStr );
+            const sessions = await this._loadSessions(week.fromStr, week.toStr);
             this._sessions = sessions;
-            cal.innerHTML = this._buildCalendarHtml( week, sessions );
+            cal.innerHTML = this._buildCalendarHtml(week, sessions);
             this._bindNavEvents();
             this._bindSessionEvents();       // M4 click/contextmenu + M7 drag move
             this._bindCalendarAreaEvents();  // M6 contextmenu vùng trống + M7 drag create
-        } catch ( err ) {
+        } catch (err) {
             cal.innerHTML = `<div class="ht-error"><p>Lỗi tải lịch: ${HT.utils.escapeHtml(err.message)}</p></div>`;
         }
     },
@@ -108,58 +108,58 @@ const ScheduleModule = {
      * @param {Array} sessions
      * @returns {string} HTML string
      */
-    _buildCalendarHtml( week, sessions ) {
-        const DAY_LABELS  = [ 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN' ];
-        const today       = this._toIso( new Date() );
-        const totalHours  = this.DAY_END_HOUR - this.DAY_START_HOUR;
-        const gridHeight  = totalHours * this.HOUR_HEIGHT;
+    _buildCalendarHtml(week, sessions) {
+        const DAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+        const today = this._toIso(new Date());
+        const totalHours = this.DAY_END_HOUR - this.DAY_START_HOUR;
+        const gridHeight = totalHours * this.HOUR_HEIGHT;
 
         // Nhóm session theo ngày
         const byDay = {};
-        for ( const s of sessions ) {
-            if ( ! byDay[ s.date ] ) byDay[ s.date ] = [];
-            byDay[ s.date ].push( s );
+        for (const s of sessions) {
+            if (!byDay[s.date]) byDay[s.date] = [];
+            byDay[s.date].push(s);
         }
 
         // Mảng 7 ngày T2..CN
         const days = [];
-        for ( let i = 0; i < 7; i++ ) {
-            const d = new Date( week.from );
-            d.setDate( week.from.getDate() + i );
-            days.push( this._toIso( d ) );
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(week.from);
+            d.setDate(week.from.getDate() + i);
+            days.push(this._toIso(d));
         }
 
         // Label header
-        const headerLabel = `${this._fmtShort( week.fromStr )} – ${this._fmtShort( week.toStr )}/${week.toStr.slice( 0, 4 )}`;
+        const headerLabel = `${this._fmtShort(week.fromStr)} – ${this._fmtShort(week.toStr)}/${week.toStr.slice(0, 4)}`;
 
         // Hour rows HTML — dùng chung cho mọi cột ngày
         let hourRowsHtml = '';
-        for ( let h = this.DAY_START_HOUR; h <= this.DAY_END_HOUR; h++ ) {
-            const top  = ( h - this.DAY_START_HOUR ) * this.HOUR_HEIGHT;
-            const cls  = h % 1 === 0 ? 'ht-cal__hour-row ht-cal__hour-row--full' : 'ht-cal__hour-row';
+        for (let h = this.DAY_START_HOUR; h <= this.DAY_END_HOUR; h++) {
+            const top = (h - this.DAY_START_HOUR) * this.HOUR_HEIGHT;
+            const cls = h % 1 === 0 ? 'ht-cal__hour-row ht-cal__hour-row--full' : 'ht-cal__hour-row';
             hourRowsHtml += `<div class="${cls}" style="top:${top}px;"></div>`;
         }
 
         // Time gutter (cột trục giờ bên trái)
         let gutterHtml = '<div class="ht-cal__time-gutter"><div class="ht-cal__time-gutter-header"></div><div class="ht-cal__time-gutter-body" style="height:' + gridHeight + 'px;">';
-        for ( let h = this.DAY_START_HOUR; h <= this.DAY_END_HOUR; h++ ) {
-            const top = ( h - this.DAY_START_HOUR ) * this.HOUR_HEIGHT;
-            gutterHtml += `<span class="ht-cal__hour-label" style="top:${top}px;">${String(h).padStart(2,'0')}:00</span>`;
+        for (let h = this.DAY_START_HOUR; h <= this.DAY_END_HOUR; h++) {
+            const top = (h - this.DAY_START_HOUR) * this.HOUR_HEIGHT;
+            gutterHtml += `<span class="ht-cal__hour-label" style="top:${top}px;">${String(h).padStart(2, '0')}:00</span>`;
         }
         gutterHtml += '</div></div>';
 
         // Cột ngày
-        const colsHtml = days.map( ( isoDate, i ) => {
+        const colsHtml = days.map((isoDate, i) => {
             const isToday = isoDate === today;
-            const blocks  = ( byDay[ isoDate ] || [] )
-                .map( s => this._renderSessionBlock( s ) )
-                .join( '' );
+            const blocks = (byDay[isoDate] || [])
+                .map(s => this._renderSessionBlock(s))
+                .join('');
 
             return `
                 <div class="ht-cal__col${isToday ? ' ht-cal__col--today' : ''}">
                     <div class="ht-cal__day-header">
-                        <span class="ht-cal__day-name">${DAY_LABELS[ i ]}</span>
-                        <span class="ht-cal__day-date">${this._fmtShort( isoDate )}</span>
+                        <span class="ht-cal__day-name">${DAY_LABELS[i]}</span>
+                        <span class="ht-cal__day-date">${this._fmtShort(isoDate)}</span>
                     </div>
                     <div class="ht-cal__day-body" data-date="${isoDate}" style="height:${gridHeight}px;">
                         ${hourRowsHtml}
@@ -167,12 +167,12 @@ const ScheduleModule = {
                     </div>
                 </div>
             `;
-        } ).join( '' );
+        }).join('');
 
         return `
             <div class="ht-cal__nav">
                 <button type="button" class="ht-btn ht-btn--ghost" id="ht-cal-prev">← Tuần trước</button>
-                <span class="ht-cal__week-label">${HT.utils.escapeHtml( headerLabel )}</span>
+                <span class="ht-cal__week-label">${HT.utils.escapeHtml(headerLabel)}</span>
                 <button type="button" class="ht-btn ht-btn--ghost" id="ht-cal-next">Tuần sau →</button>
             </div>
             <div class="ht-cal__grid">
@@ -183,31 +183,57 @@ const ScheduleModule = {
     },
 
     /**
+     * Chuyển hex color thành rgba() với alpha cho trước (mặc định 0.12).
+     * @param {string} hex
+     * @param {number} alpha
+     * @returns {string}
+     */
+    _hexToRgba(hex, alpha = 0.12) {
+        if (!hex || typeof hex !== 'string' || !hex.startsWith('#')) {
+            return `rgba(74, 144, 217, ${alpha})`;
+        }
+        let clean = hex.slice(1);
+        if (clean.length === 3) {
+            clean = clean.split('').map(c => c + c).join('');
+        }
+        if (clean.length !== 6) {
+            return `rgba(74, 144, 217, ${alpha})`;
+        }
+        const num = parseInt(clean, 16);
+        const r = (num >> 16) & 255;
+        const g = (num >> 8) & 255;
+        const b = num & 255;
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    },
+
+    /**
      * Render 1 session block — M7: absolute position theo start_time/end_time.
      * display_color ưu tiên; fallback về class_color.
      *
      * @param {Object} s  Session object
      * @returns {string} HTML string
      */
-    _renderSessionBlock( s ) {
-        const color    = HT.utils.escapeHtml( s.display_color || s.class_color || '#888888' );
-        const name     = HT.utils.escapeHtml( s.class_name || '' );
-        const sessName = s.session_name ? HT.utils.escapeHtml( s.session_name ) : '';
-        const timeStr  = this._fmtTime( s.start_time ) +
-                         ( s.end_time ? ' – ' + this._fmtTime( s.end_time ) : '' );
+    _renderSessionBlock(s) {
+        const rawColor = s.display_color || s.class_color || '#4A90D9';
+        const color = HT.utils.escapeHtml(rawColor);
+        const bgColor = this._hexToRgba(rawColor, 0.12);
+        const name = HT.utils.escapeHtml(s.class_name || '');
+        const sessName = s.session_name ? HT.utils.escapeHtml(s.session_name) : '';
+        const timeStr = this._fmtTime(s.start_time) +
+            (s.end_time ? ' – ' + this._fmtTime(s.end_time) : '');
 
         // Tính top/height từ start_time/end_time
-        const startM = this._timeToMinutes( s.start_time );
-        const endM   = this._timeToMinutes( s.end_time || s.start_time );
+        const startM = this._timeToMinutes(s.start_time);
+        const endM = this._timeToMinutes(s.end_time || s.start_time);
         const dayStartM = this.DAY_START_HOUR * 60;
-        const top    = Math.max( 0, ( startM - dayStartM ) / 60 * this.HOUR_HEIGHT );
-        const height = Math.max( 20, ( endM - startM ) / 60 * this.HOUR_HEIGHT );
+        const top = Math.max(0, (startM - dayStartM) / 60 * this.HOUR_HEIGHT);
+        const height = Math.max(20, (endM - startM) / 60 * this.HOUR_HEIGHT);
 
         return `
-            <div class="ht-session-block" data-id="${s.id}" style="border-left:3px solid ${color}; top:${top}px; height:${height}px;">
+            <div class="ht-session-block" data-id="${s.id}" style="border-left:3px solid ${color}; background-color:${bgColor}; top:${top}px; height:${height}px;">
                 <div class="ht-session-block__name">${name}</div>
                 ${sessName ? `<div class="ht-session-block__title">${sessName}</div>` : ''}
-                <div class="ht-session-block__time">${HT.utils.escapeHtml( timeStr )}</div>
+                <div class="ht-session-block__time">${HT.utils.escapeHtml(timeStr)}</div>
             </div>
         `;
     },
@@ -219,49 +245,49 @@ const ScheduleModule = {
      * pointerdown → bắt đầu drag-move tracking (M7).
      */
     _bindSessionEvents() {
-        document.querySelectorAll( '.ht-session-block[data-id]' ).forEach( el => {
-            el.addEventListener( 'click', ( e ) => {
+        document.querySelectorAll('.ht-session-block[data-id]').forEach(el => {
+            el.addEventListener('click', (e) => {
                 // Suppress click nếu vừa hoàn thành drag move
-                if ( this._dragClickSuppressed ) return;
-                const id = parseInt( el.dataset.id, 10 );
-                if ( id ) this._openEditForm( id );
-            } );
-            el.addEventListener( 'contextmenu', ( e ) => {
+                if (this._dragClickSuppressed) return;
+                const id = parseInt(el.dataset.id, 10);
+                if (id) this._openEditForm(id);
+            });
+            el.addEventListener('contextmenu', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                const id = parseInt( el.dataset.id, 10 );
-                if ( id ) this._showSessionContextMenu( e, id );
-            } );
+                const id = parseInt(el.dataset.id, 10);
+                if (id) this._showSessionContextMenu(e, id);
+            });
             // M7: Drag Move — pointerdown
-            el.addEventListener( 'pointerdown', ( e ) => {
+            el.addEventListener('pointerdown', (e) => {
                 // Chỉ main button (left click)
-                if ( e.button !== 0 ) return;
-                const id = parseInt( el.dataset.id, 10 );
-                if ( id ) this._onSessionPointerDown( e, el, id );
-            } );
-        } );
+                if (e.button !== 0) return;
+                const id = parseInt(el.dataset.id, 10);
+                if (id) this._onSessionPointerDown(e, el, id);
+            });
+        });
     },
 
     /**
      * Bind contextmenu (M6) và drag-create pointerdown (M7) trên vùng lịch trống.
      */
     _bindCalendarAreaEvents() {
-        document.querySelectorAll( '.ht-cal__day-body[data-date]' ).forEach( el => {
-            el.addEventListener( 'contextmenu', ( e ) => {
-                if ( e.target.closest( '.ht-session-block' ) ) return;
+        document.querySelectorAll('.ht-cal__day-body[data-date]').forEach(el => {
+            el.addEventListener('contextmenu', (e) => {
+                if (e.target.closest('.ht-session-block')) return;
                 e.preventDefault();
                 e.stopPropagation();
                 const date = el.dataset.date;
-                if ( date ) this._showEmptyContextMenu( e, date );
-            } );
+                if (date) this._showEmptyContextMenu(e, date);
+            });
             // M7: Drag Create — pointerdown trên vùng trống
-            el.addEventListener( 'pointerdown', ( e ) => {
-                if ( e.button !== 0 ) return;
-                if ( e.target.closest( '.ht-session-block' ) ) return;
+            el.addEventListener('pointerdown', (e) => {
+                if (e.button !== 0) return;
+                if (e.target.closest('.ht-session-block')) return;
                 const date = el.dataset.date;
-                if ( date ) this._onCreatePointerDown( e, el, date );
-            } );
-        } );
+                if (date) this._onCreatePointerDown(e, el, date);
+            });
+        });
     },
 
     // ──────────────────────────────────────────────────────────
@@ -272,18 +298,18 @@ const ScheduleModule = {
      * Chuyển tuần.
      * @param {number} delta  -1 = tuần trước, +1 = tuần sau
      */
-    _navigate( delta ) {
-        this._currentDate = new Date( this._currentDate );
-        this._currentDate.setDate( this._currentDate.getDate() + delta * 7 );
+    _navigate(delta) {
+        this._currentDate = new Date(this._currentDate);
+        this._currentDate.setDate(this._currentDate.getDate() + delta * 7);
         this._render();
     },
 
     /** Bind nút ← → sau mỗi lần render */
     _bindNavEvents() {
-        document.getElementById( 'ht-cal-prev' )
-            ?.addEventListener( 'click', () => this._navigate( -1 ) );
-        document.getElementById( 'ht-cal-next' )
-            ?.addEventListener( 'click', () => this._navigate( +1 ) );
+        document.getElementById('ht-cal-prev')
+            ?.addEventListener('click', () => this._navigate(-1));
+        document.getElementById('ht-cal-next')
+            ?.addEventListener('click', () => this._navigate(+1));
     },
 
     // ──────────────────────────────────────────────────────────
@@ -297,11 +323,11 @@ const ScheduleModule = {
      * @param {string} toStr    'YYYY-MM-DD'
      * @returns {Promise<Array>}
      */
-    async _loadSessions( fromStr, toStr ) {
-        const data = await HT.api.call( 'hinteach_session_list', {
+    async _loadSessions(fromStr, toStr) {
+        const data = await HT.api.call('hinteach_session_list', {
             date_from: fromStr,
-            date_to:   toStr,
-        }, 'GET' );
+            date_to: toStr,
+        }, 'GET');
         return data.sessions || [];
     },
 
@@ -315,37 +341,37 @@ const ScheduleModule = {
      * @param {Date} date
      * @returns {{ from: Date, to: Date, fromStr: string, toStr: string }}
      */
-    _getWeekRange( date ) {
-        const d      = new Date( date );
-        const day    = d.getDay();            // 0=CN,1=T2,...,6=T7
-        const offset = ( day + 6 ) % 7;      // T2→0, T3→1, ..., CN→6
+    _getWeekRange(date) {
+        const d = new Date(date);
+        const day = d.getDay();            // 0=CN,1=T2,...,6=T7
+        const offset = (day + 6) % 7;      // T2→0, T3→1, ..., CN→6
 
-        const from = new Date( d );
-        from.setDate( d.getDate() - offset ); // T2 của tuần
+        const from = new Date(d);
+        from.setDate(d.getDate() - offset); // T2 của tuần
 
-        const to = new Date( from );
-        to.setDate( from.getDate() + 6 );     // CN của tuần
+        const to = new Date(from);
+        to.setDate(from.getDate() + 6);     // CN của tuần
 
-        return { from, to, fromStr: this._toIso( from ), toStr: this._toIso( to ) };
+        return { from, to, fromStr: this._toIso(from), toStr: this._toIso(to) };
     },
 
     /** Date → 'YYYY-MM-DD' */
-    _toIso( date ) {
+    _toIso(date) {
         const y = date.getFullYear();
-        const m = String( date.getMonth() + 1 ).padStart( 2, '0' );
-        const d = String( date.getDate() ).padStart( 2, '0' );
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
         return `${y}-${m}-${d}`;
     },
 
     /** 'YYYY-MM-DD' → 'DD/MM' */
-    _fmtShort( iso ) {
-        return iso.slice( 8, 10 ) + '/' + iso.slice( 5, 7 );
+    _fmtShort(iso) {
+        return iso.slice(8, 10) + '/' + iso.slice(5, 7);
     },
 
     /** 'HH:MM:SS' hoặc 'HH:MM' → 'HH:MM' */
-    _fmtTime( timeStr ) {
-        if ( ! timeStr ) return '';
-        return timeStr.slice( 0, 5 );
+    _fmtTime(timeStr) {
+        if (!timeStr) return '';
+        return timeStr.slice(0, 5);
     },
 
     // ──────────────────────────────────────────────────────────
@@ -362,87 +388,87 @@ const ScheduleModule = {
      *
      * @param {Object|null} prefill
      */
-    async _openCreateForm( prefill = null ) {
+    async _openCreateForm(prefill = null) {
         // Load danh sách lớp
         let classes = [];
         try {
-            const data = await HT.api.call( 'hinteach_class_list', {}, 'POST' );
+            const data = await HT.api.call('hinteach_class_list', {}, 'POST');
             classes = data.classes || [];
-        } catch ( err ) {
-            HT.utils.toast( 'Không thể tải danh sách lớp: ' + err.message, 'error' );
+        } catch (err) {
+            HT.utils.toast('Không thể tải danh sách lớp: ' + err.message, 'error');
             return;
         }
 
-        if ( ! classes.length ) {
-            HT.utils.toast( 'Chưa có lớp học nào. Vui lòng tạo lớp trước.', 'error' );
+        if (!classes.length) {
+            HT.utils.toast('Chưa có lớp học nào. Vui lòng tạo lớp trước.', 'error');
             return;
         }
 
-        const today = this._toIso( new Date() );
+        const today = this._toIso(new Date());
         const defaultDate = prefill?.date || today;
         const modalTitle = prefill?.isPaste ? 'Tạo buổi học (Dán)' : 'Tạo buổi học mới';
 
-        HT.modal.open( {
+        HT.modal.open({
             title: modalTitle,
-            body: this._buildCreateFormHtml( classes, defaultDate, prefill ),
+            body: this._buildCreateFormHtml(classes, defaultDate, prefill),
             footer: `
                 <button type="button" class="ht-btn ht-btn--secondary" id="ht-session-form-cancel">Huỷ</button>
                 <button type="button" class="ht-btn ht-btn--primary" id="ht-session-form-save">Tạo buổi</button>
             `,
-        } );
+        });
 
         // Internal state for repeat dates
         this._repeatDates = [];
 
         // Bind events
-        document.getElementById( 'ht-session-form-cancel' )
-            ?.addEventListener( 'click', () => HT.modal.close() );
-        document.getElementById( 'ht-session-form-save' )
-            ?.addEventListener( 'click', () => this._saveSession() );
-        document.getElementById( 'ht-sf-class' )
-            ?.addEventListener( 'change', ( e ) => this._onClassChange( e.target.value ) );
-        document.querySelectorAll( 'input[name="type"]' ).forEach( r => {
-            r.addEventListener( 'change', () => this._onTypeChange() );
-        } );
-        document.getElementById( 'ht-sf-color-toggle' )
-            ?.addEventListener( 'change', ( e ) => {
-                const colorInput = document.getElementById( 'ht-sf-color' );
-                if ( colorInput ) colorInput.disabled = ! e.target.checked;
-            } );
+        document.getElementById('ht-session-form-cancel')
+            ?.addEventListener('click', () => HT.modal.close());
+        document.getElementById('ht-session-form-save')
+            ?.addEventListener('click', () => this._saveSession());
+        document.getElementById('ht-sf-class')
+            ?.addEventListener('change', (e) => this._onClassChange(e.target.value));
+        document.querySelectorAll('input[name="type"]').forEach(r => {
+            r.addEventListener('change', () => this._onTypeChange());
+        });
+        document.getElementById('ht-sf-color-toggle')
+            ?.addEventListener('change', (e) => {
+                const colorInput = document.getElementById('ht-sf-color');
+                if (colorInput) colorInput.disabled = !e.target.checked;
+            });
 
         // M3: Recurrence event bindings
-        document.getElementById( 'ht-sf-repeat-toggle' )
-            ?.addEventListener( 'change', ( e ) => {
-                const panel = document.getElementById( 'ht-sf-repeat-panel' );
-                if ( panel ) panel.style.display = e.target.checked ? '' : 'none';
-                if ( ! e.target.checked ) {
+        document.getElementById('ht-sf-repeat-toggle')
+            ?.addEventListener('change', (e) => {
+                const panel = document.getElementById('ht-sf-repeat-panel');
+                if (panel) panel.style.display = e.target.checked ? '' : 'none';
+                if (!e.target.checked) {
                     this._repeatDates = [];
                     this._renderRepeatChips();
                 }
-            } );
-        document.querySelectorAll( 'input[name="repeat_mode"]' ).forEach( r => {
-            r.addEventListener( 'change', () => this._onRecurrenceChange() );
-        } );
-        document.getElementById( 'ht-sf-repeat-until' )
-            ?.addEventListener( 'change', () => this._onRecurrenceChange() );
-        document.querySelectorAll( '.ht-weekday-btn' ).forEach( btn => {
-            btn.addEventListener( 'click', () => {
-                btn.classList.toggle( 'ht-weekday-btn--active' );
+            });
+        document.querySelectorAll('input[name="repeat_mode"]').forEach(r => {
+            r.addEventListener('change', () => this._onRecurrenceChange());
+        });
+        document.getElementById('ht-sf-repeat-until')
+            ?.addEventListener('change', () => this._onRecurrenceChange());
+        document.querySelectorAll('.ht-weekday-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                btn.classList.toggle('ht-weekday-btn--active');
                 this._onRecurrenceChange();
-            } );
-        } );
-        document.getElementById( 'ht-sf-repeat-gen' )
-            ?.addEventListener( 'click', () => this._onRecurrenceChange() );
-        document.getElementById( 'ht-sf-custom-date' )
-            ?.addEventListener( 'keydown', ( e ) => {
-                if ( e.key === 'Enter' ) { e.preventDefault(); this._addCustomRepeatDate(); }
-            } );
-        document.getElementById( 'ht-sf-custom-add' )
-            ?.addEventListener( 'click', () => this._addCustomRepeatDate() );
+            });
+        });
+        document.getElementById('ht-sf-repeat-gen')
+            ?.addEventListener('click', () => this._onRecurrenceChange());
+        document.getElementById('ht-sf-custom-date')
+            ?.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); this._addCustomRepeatDate(); }
+            });
+        document.getElementById('ht-sf-custom-add')
+            ?.addEventListener('click', () => this._addCustomRepeatDate());
 
         // Nếu có prefill class_id (Paste), load học sinh và check checkboxes
-        if ( prefill?.class_id ) {
-            await this._onClassChange( prefill.class_id, prefill.student_ids || [], prefill.price );
+        if (prefill?.class_id) {
+            await this._onClassChange(prefill.class_id, prefill.student_ids || [], prefill.price);
         }
     },
 
@@ -454,16 +480,16 @@ const ScheduleModule = {
      * @param {Object|null} prefill  Dữ liệu prefill (Paste)
      * @returns {string} HTML
      */
-    _buildCreateFormHtml( classes, defaultDate, prefill = null ) {
-        const selectedClassId = prefill?.class_id ? Number( prefill.class_id ) : '';
-        const startTime       = prefill?.start_time || '';
-        const endTime         = prefill?.end_time || '';
-        const type            = prefill?.type || 'riêng';
-        const price           = prefill?.price !== undefined ? prefill.price : 0;
-        const sessionName     = prefill?.session_name ? HT.utils.escapeHtml( prefill.session_name ) : '';
-        const content         = prefill?.content ? HT.utils.escapeHtml( prefill.content ) : '';
-        const homework        = prefill?.homework_content ? HT.utils.escapeHtml( prefill.homework_content ) : '';
-        const comment         = prefill?.general_comment ? HT.utils.escapeHtml( prefill.general_comment ) : '';
+    _buildCreateFormHtml(classes, defaultDate, prefill = null) {
+        const selectedClassId = prefill?.class_id ? Number(prefill.class_id) : '';
+        const startTime = prefill?.start_time || '';
+        const endTime = prefill?.end_time || '';
+        const type = prefill?.type || 'riêng';
+        const price = prefill?.price !== undefined ? prefill.price : 0;
+        const sessionName = prefill?.session_name ? HT.utils.escapeHtml(prefill.session_name) : '';
+        const content = prefill?.content ? HT.utils.escapeHtml(prefill.content) : '';
+        const homework = prefill?.homework_content ? HT.utils.escapeHtml(prefill.homework_content) : '';
+        const comment = prefill?.general_comment ? HT.utils.escapeHtml(prefill.general_comment) : '';
 
         return `
             <form id="ht-session-form" class="ht-form">
@@ -473,11 +499,11 @@ const ScheduleModule = {
                         <label class="ht-form__label" for="ht-sf-class">Lớp *</label>
                         <select id="ht-sf-class" name="class_id" class="ht-form__select" required>
                             <option value="">-- Chọn lớp --</option>
-                            ${classes.map( c => `
-                                <option value="${c.id}" data-fee="${c.fee_amount || 0}" ${Number( c.id ) === selectedClassId ? 'selected' : ''}>
-                                    ${HT.utils.escapeHtml( c.name )}
+                            ${classes.map(c => `
+                                <option value="${c.id}" data-fee="${c.fee_amount || 0}" ${Number(c.id) === selectedClassId ? 'selected' : ''}>
+                                    ${HT.utils.escapeHtml(c.name)}
                                 </option>
-                            ` ).join( '' )}
+                            ` ).join('')}
                         </select>
                     </div>
                 </fieldset>
@@ -609,11 +635,11 @@ const ScheduleModule = {
      * @param {Array} prefillStudentIds
      * @param {number|null} prefillPrice
      */
-    async _onClassChange( classId, prefillStudentIds = [], prefillPrice = null ) {
-        const container = document.getElementById( 'ht-sf-students-container' );
-        if ( ! container ) return;
+    async _onClassChange(classId, prefillStudentIds = [], prefillPrice = null) {
+        const container = document.getElementById('ht-sf-students-container');
+        if (!container) return;
 
-        if ( ! classId ) {
+        if (!classId) {
             container.innerHTML = `
                 <label class="ht-form__label">Học sinh *</label>
                 <p class="ht-form__note">Chọn lớp trước để xem danh sách học sinh.</p>
@@ -627,25 +653,25 @@ const ScheduleModule = {
         `;
 
         try {
-            const data = await HT.api.call( 'hinteach_class_get', { class_id: classId }, 'GET' );
-            const students  = data.students || [];
+            const data = await HT.api.call('hinteach_class_get', { class_id: classId }, 'GET');
+            const students = data.students || [];
             const classData = data.class;
 
             // Prefill giá từ class.fee_amount hoặc prefillPrice nếu có
-            const priceInput = document.getElementById( 'ht-sf-price' );
-            if ( priceInput ) {
-                if ( prefillPrice !== null && prefillPrice !== undefined ) {
+            const priceInput = document.getElementById('ht-sf-price');
+            if (priceInput) {
+                if (prefillPrice !== null && prefillPrice !== undefined) {
                     priceInput.value = prefillPrice;
-                } else if ( classData && classData.fee_amount ) {
+                } else if (classData && classData.fee_amount) {
                     priceInput.value = classData.fee_amount;
                 }
             }
 
-            this._renderStudentsList( students, prefillStudentIds );
-        } catch ( err ) {
+            this._renderStudentsList(students, prefillStudentIds);
+        } catch (err) {
             container.innerHTML = `
                 <label class="ht-form__label">Học sinh *</label>
-                <p class="ht-form__note">Lỗi tải danh sách: ${HT.utils.escapeHtml( err.message )}</p>
+                <p class="ht-form__note">Lỗi tải danh sách: ${HT.utils.escapeHtml(err.message)}</p>
             `;
         }
     },
@@ -656,11 +682,11 @@ const ScheduleModule = {
      * @param {Array} students
      * @param {Array} prefillStudentIds
      */
-    _renderStudentsList( students, prefillStudentIds = [] ) {
-        const container = document.getElementById( 'ht-sf-students-container' );
-        if ( ! container ) return;
+    _renderStudentsList(students, prefillStudentIds = []) {
+        const container = document.getElementById('ht-sf-students-container');
+        if (!container) return;
 
-        if ( ! students.length ) {
+        if (!students.length) {
             container.innerHTML = `
                 <label class="ht-form__label">Học sinh *</label>
                 <p class="ht-form__note">Lớp này chưa có học sinh nào.</p>
@@ -668,35 +694,35 @@ const ScheduleModule = {
             return;
         }
 
-        const type = document.querySelector( 'input[name="type"]:checked' )?.value || 'riêng';
+        const type = document.querySelector('input[name="type"]:checked')?.value || 'riêng';
         const hint = type === 'riêng' ? '(chọn 1)' : '(chọn ít nhất 2)';
-        const selectedIds = Array.isArray( prefillStudentIds ) ? prefillStudentIds.map( id => Number( id ) ) : [];
+        const selectedIds = Array.isArray(prefillStudentIds) ? prefillStudentIds.map(id => Number(id)) : [];
 
         container.innerHTML = `
             <label class="ht-form__label">Học sinh * ${hint}</label>
             <div class="ht-multi-select" id="ht-sf-students">
-                ${students.map( s => {
-                    const checked = selectedIds.includes( Number( s.id ) ) ? 'checked' : '';
-                    return `
+                ${students.map(s => {
+            const checked = selectedIds.includes(Number(s.id)) ? 'checked' : '';
+            return `
                         <label class="ht-multi-select__item">
                             <input type="checkbox" name="student_ids" value="${s.id}" ${checked} />
-                            <span>${HT.utils.escapeHtml( s.name )}</span>
+                            <span>${HT.utils.escapeHtml(s.name)}</span>
                         </label>
                     `;
-                } ).join( '' )}
+        }).join('')}
             </div>
         `;
     },
 
     /** Cập nhật label học sinh khi đổi type riêng/chung. */
     _onTypeChange() {
-        const studentsDiv = document.getElementById( 'ht-sf-students' );
-        if ( ! studentsDiv ) return;
+        const studentsDiv = document.getElementById('ht-sf-students');
+        if (!studentsDiv) return;
 
-        const type  = document.querySelector( 'input[name="type"]:checked' )?.value || 'riêng';
-        const hint  = type === 'riêng' ? '(chọn 1)' : '(chọn ít nhất 2)';
-        const label = studentsDiv.closest( '.ht-form__row' )?.querySelector( '.ht-form__label' );
-        if ( label ) {
+        const type = document.querySelector('input[name="type"]:checked')?.value || 'riêng';
+        const hint = type === 'riêng' ? '(chọn 1)' : '(chọn ít nhất 2)';
+        const label = studentsDiv.closest('.ht-form__row')?.querySelector('.ht-form__label');
+        if (label) {
             label.textContent = `Học sinh * ${hint}`;
         }
     },
@@ -711,43 +737,43 @@ const ScheduleModule = {
      * Custom mode không tự sinh — user thêm tay.
      */
     _onRecurrenceChange() {
-        const mode = document.querySelector( 'input[name="repeat_mode"]:checked' )?.value || 'daily';
+        const mode = document.querySelector('input[name="repeat_mode"]:checked')?.value || 'daily';
 
         // Show/hide UI elements based on mode
-        const untilRow   = document.getElementById( 'ht-sf-repeat-until-row' );
-        const weekdayRow = document.getElementById( 'ht-sf-weekday-row' );
-        const customRow  = document.getElementById( 'ht-sf-custom-row' );
-        const genRow     = document.getElementById( 'ht-sf-repeat-gen-row' );
+        const untilRow = document.getElementById('ht-sf-repeat-until-row');
+        const weekdayRow = document.getElementById('ht-sf-weekday-row');
+        const customRow = document.getElementById('ht-sf-custom-row');
+        const genRow = document.getElementById('ht-sf-repeat-gen-row');
 
-        if ( untilRow )   untilRow.style.display   = mode === 'custom' ? 'none' : '';
-        if ( weekdayRow ) weekdayRow.style.display  = mode === 'weekly' ? '' : 'none';
-        if ( customRow )  customRow.style.display   = mode === 'custom' ? '' : 'none';
-        if ( genRow )     genRow.style.display      = mode === 'custom' ? 'none' : '';
+        if (untilRow) untilRow.style.display = mode === 'custom' ? 'none' : '';
+        if (weekdayRow) weekdayRow.style.display = mode === 'weekly' ? '' : 'none';
+        if (customRow) customRow.style.display = mode === 'custom' ? '' : 'none';
+        if (genRow) genRow.style.display = mode === 'custom' ? 'none' : '';
 
         // For non-custom modes, generate dates
-        if ( mode !== 'custom' ) {
-            const baseDate = document.getElementById( 'ht-sf-date' )?.value || '';
-            const until    = document.getElementById( 'ht-sf-repeat-until' )?.value || '';
+        if (mode !== 'custom') {
+            const baseDate = document.getElementById('ht-sf-date')?.value || '';
+            const until = document.getElementById('ht-sf-repeat-until')?.value || '';
 
-            if ( ! baseDate || ! until ) return;
-            if ( until <= baseDate ) {
-                HT.utils.toast( 'Ngày kết thúc lặp phải sau ngày gốc.', 'error' );
+            if (!baseDate || !until) return;
+            if (until <= baseDate) {
+                HT.utils.toast('Ngày kết thúc lặp phải sau ngày gốc.', 'error');
                 return;
             }
 
             let selectedWeekdays = [];
-            if ( mode === 'weekly' ) {
+            if (mode === 'weekly') {
                 selectedWeekdays = Array.from(
-                    document.querySelectorAll( '.ht-weekday-btn--active' )
-                ).map( btn => parseInt( btn.dataset.day, 10 ) );
+                    document.querySelectorAll('.ht-weekday-btn--active')
+                ).map(btn => parseInt(btn.dataset.day, 10));
 
-                if ( ! selectedWeekdays.length ) {
-                    HT.utils.toast( 'Vui lòng chọn ít nhất 1 thứ trong tuần.', 'error' );
+                if (!selectedWeekdays.length) {
+                    HT.utils.toast('Vui lòng chọn ít nhất 1 thứ trong tuần.', 'error');
                     return;
                 }
             }
 
-            this._repeatDates = this._generateRepeatDates( mode, baseDate, until, selectedWeekdays );
+            this._repeatDates = this._generateRepeatDates(mode, baseDate, until, selectedWeekdays);
             this._renderRepeatChips();
         }
     },
@@ -761,52 +787,52 @@ const ScheduleModule = {
      * @param {number[]} weekdays    Mảng thứ (0=CN,1=T2,...6=T7) — chỉ dùng cho weekly
      * @returns {string[]}           Mảng YYYY-MM-DD, đã sort, slice(0, 365)
      */
-    _generateRepeatDates( mode, startDate, until, weekdays ) {
+    _generateRepeatDates(mode, startDate, until, weekdays) {
         const dates = [];
-        const start = new Date( startDate + 'T00:00:00' );
-        const end   = new Date( until + 'T00:00:00' );
+        const start = new Date(startDate + 'T00:00:00');
+        const end = new Date(until + 'T00:00:00');
 
-        if ( mode === 'daily' ) {
-            const cursor = new Date( start );
-            cursor.setDate( cursor.getDate() + 1 ); // Bắt đầu từ ngày sau base
-            while ( cursor <= end && dates.length < 365 ) {
-                dates.push( this._toIso( cursor ) );
-                cursor.setDate( cursor.getDate() + 1 );
+        if (mode === 'daily') {
+            const cursor = new Date(start);
+            cursor.setDate(cursor.getDate() + 1); // Bắt đầu từ ngày sau base
+            while (cursor <= end && dates.length < 365) {
+                dates.push(this._toIso(cursor));
+                cursor.setDate(cursor.getDate() + 1);
             }
-        } else if ( mode === 'weekly' ) {
-            const cursor = new Date( start );
-            cursor.setDate( cursor.getDate() + 1 );
-            while ( cursor <= end && dates.length < 365 ) {
-                if ( weekdays.includes( cursor.getDay() ) ) {
-                    dates.push( this._toIso( cursor ) );
+        } else if (mode === 'weekly') {
+            const cursor = new Date(start);
+            cursor.setDate(cursor.getDate() + 1);
+            while (cursor <= end && dates.length < 365) {
+                if (weekdays.includes(cursor.getDay())) {
+                    dates.push(this._toIso(cursor));
                 }
-                cursor.setDate( cursor.getDate() + 1 );
+                cursor.setDate(cursor.getDate() + 1);
             }
-        } else if ( mode === 'monthly' ) {
+        } else if (mode === 'monthly') {
             // Lặp cùng thứ-occurrence trong tháng (vd: thứ 3 tuần thứ 2)
-            const baseDay       = start.getDay(); // 0-6
-            const baseOccurrence = Math.ceil( start.getDate() / 7 ); // Occurrence 1-5
+            const baseDay = start.getDay(); // 0-6
+            const baseOccurrence = Math.ceil(start.getDate() / 7); // Occurrence 1-5
 
             let month = start.getMonth();
-            let year  = start.getFullYear();
+            let year = start.getFullYear();
 
-            while ( dates.length < 365 ) {
+            while (dates.length < 365) {
                 month++;
-                if ( month > 11 ) { month = 0; year++; }
+                if (month > 11) { month = 0; year++; }
 
-                const candidate = this._nthWeekdayOfMonth( year, month, baseDay, baseOccurrence );
-                if ( ! candidate ) continue;
-                if ( candidate > this._toIso( end ) ) break;
-                if ( candidate <= startDate ) continue;
+                const candidate = this._nthWeekdayOfMonth(year, month, baseDay, baseOccurrence);
+                if (!candidate) continue;
+                if (candidate > this._toIso(end)) break;
+                if (candidate <= startDate) continue;
 
-                dates.push( candidate );
+                dates.push(candidate);
             }
         }
 
         // Dedupe (Set), sort, slice(0, 365) — v3 fix
-        const unique = [ ...new Set( dates ) ];
+        const unique = [...new Set(dates)];
         unique.sort();
-        return unique.slice( 0, 365 );
+        return unique.slice(0, 365);
     },
 
     /**
@@ -820,62 +846,62 @@ const ScheduleModule = {
      * @param {number} occurrence  1-5
      * @returns {string|null}      'YYYY-MM-DD' hoặc null
      */
-    _nthWeekdayOfMonth( year, month, weekday, occurrence ) {
+    _nthWeekdayOfMonth(year, month, weekday, occurrence) {
         // Tìm ngày đầu tiên trong tháng có đúng weekday
-        const firstDay = new Date( year, month, 1 );
-        let firstOccurrence = 1 + ( ( weekday - firstDay.getDay() + 7 ) % 7 );
+        const firstDay = new Date(year, month, 1);
+        let firstOccurrence = 1 + ((weekday - firstDay.getDay() + 7) % 7);
 
         // Tính ngày target
-        let targetDate = firstOccurrence + ( occurrence - 1 ) * 7;
+        let targetDate = firstOccurrence + (occurrence - 1) * 7;
 
         // Số ngày trong tháng
-        const daysInMonth = new Date( year, month + 1, 0 ).getDate();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
 
         // Fallback: nếu vượt quá → lùi về occurrence cuối cùng
-        while ( targetDate > daysInMonth ) {
+        while (targetDate > daysInMonth) {
             targetDate -= 7;
         }
 
-        if ( targetDate < 1 ) return null;
+        if (targetDate < 1) return null;
 
-        const d = new Date( year, month, targetDate );
-        return this._toIso( d );
+        const d = new Date(year, month, targetDate);
+        return this._toIso(d);
     },
 
     /**
      * Render chip list preview cho repeat_dates.
      */
     _renderRepeatChips() {
-        const container = document.getElementById( 'ht-sf-repeat-chips' );
-        const countEl   = document.getElementById( 'ht-sf-repeat-count' );
-        if ( ! container ) return;
+        const container = document.getElementById('ht-sf-repeat-chips');
+        const countEl = document.getElementById('ht-sf-repeat-count');
+        if (!container) return;
 
-        if ( countEl ) countEl.textContent = this._repeatDates.length;
+        if (countEl) countEl.textContent = this._repeatDates.length;
 
-        if ( ! this._repeatDates.length ) {
+        if (!this._repeatDates.length) {
             container.innerHTML = '<p class="ht-form__note">Chưa có ngày lặp nào.</p>';
             return;
         }
 
-        container.innerHTML = this._repeatDates.map( d => `
+        container.innerHTML = this._repeatDates.map(d => `
             <span class="ht-chip">
-                ${this._fmtShort( d )}
+                ${this._fmtShort(d)}
                 <button type="button" class="ht-chip__remove" data-date="${d}">&times;</button>
             </span>
-        ` ).join( '' );
+        ` ).join('');
 
         // Bind remove events
-        container.querySelectorAll( '.ht-chip__remove' ).forEach( btn => {
-            btn.addEventListener( 'click', () => this._removeRepeatDate( btn.dataset.date ) );
-        } );
+        container.querySelectorAll('.ht-chip__remove').forEach(btn => {
+            btn.addEventListener('click', () => this._removeRepeatDate(btn.dataset.date));
+        });
     },
 
     /**
      * Xoá 1 ngày khỏi repeat_dates và re-render chips.
      * @param {string} dateStr  YYYY-MM-DD
      */
-    _removeRepeatDate( dateStr ) {
-        this._repeatDates = this._repeatDates.filter( d => d !== dateStr );
+    _removeRepeatDate(dateStr) {
+        this._repeatDates = this._repeatDates.filter(d => d !== dateStr);
         this._renderRepeatChips();
     },
 
@@ -883,31 +909,31 @@ const ScheduleModule = {
      * Thêm 1 ngày thủ công vào repeat_dates (custom mode).
      */
     _addCustomRepeatDate() {
-        const input    = document.getElementById( 'ht-sf-custom-date' );
-        const baseDate = document.getElementById( 'ht-sf-date' )?.value || '';
-        if ( ! input || ! input.value ) {
-            HT.utils.toast( 'Vui lòng chọn ngày.', 'error' );
+        const input = document.getElementById('ht-sf-custom-date');
+        const baseDate = document.getElementById('ht-sf-date')?.value || '';
+        if (!input || !input.value) {
+            HT.utils.toast('Vui lòng chọn ngày.', 'error');
             return;
         }
 
         const newDate = input.value;
 
-        if ( newDate <= baseDate ) {
-            HT.utils.toast( 'Ngày lặp phải sau ngày gốc (' + this._fmtShort( baseDate ) + ').', 'error' );
+        if (newDate <= baseDate) {
+            HT.utils.toast('Ngày lặp phải sau ngày gốc (' + this._fmtShort(baseDate) + ').', 'error');
             return;
         }
 
-        if ( this._repeatDates.includes( newDate ) ) {
-            HT.utils.toast( 'Ngày này đã có trong danh sách.', 'error' );
+        if (this._repeatDates.includes(newDate)) {
+            HT.utils.toast('Ngày này đã có trong danh sách.', 'error');
             return;
         }
 
-        if ( this._repeatDates.length >= 365 ) {
-            HT.utils.toast( 'Đã đạt giới hạn 365 ngày lặp.', 'error' );
+        if (this._repeatDates.length >= 365) {
+            HT.utils.toast('Đã đạt giới hạn 365 ngày lặp.', 'error');
             return;
         }
 
-        this._repeatDates.push( newDate );
+        this._repeatDates.push(newDate);
         this._repeatDates.sort();
         this._renderRepeatChips();
         input.value = '';
@@ -919,75 +945,75 @@ const ScheduleModule = {
      * M3: nếu có repeat_dates → gọi hinteach_session_save_recurring.
      */
     async _saveSession() {
-        const form = document.getElementById( 'ht-session-form' );
-        if ( ! form ) return;
+        const form = document.getElementById('ht-session-form');
+        if (!form) return;
 
         // Collect
-        const classId   = form.querySelector( '[name="class_id"]' )?.value || '';
-        const date      = form.querySelector( '[name="date"]' )?.value || '';
-        const startTime = form.querySelector( '[name="start_time"]' )?.value || '';
-        const endTime   = form.querySelector( '[name="end_time"]' )?.value || '';
-        const type      = form.querySelector( 'input[name="type"]:checked' )?.value || '';
-        const price     = form.querySelector( '[name="price"]' )?.value || '0';
-        const sessName  = form.querySelector( '[name="session_name"]' )?.value || '';
-        const content   = form.querySelector( '[name="content"]' )?.value || '';
-        const homework  = form.querySelector( '[name="homework_content"]' )?.value || '';
-        const comment   = form.querySelector( '[name="general_comment"]' )?.value || '';
+        const classId = form.querySelector('[name="class_id"]')?.value || '';
+        const date = form.querySelector('[name="date"]')?.value || '';
+        const startTime = form.querySelector('[name="start_time"]')?.value || '';
+        const endTime = form.querySelector('[name="end_time"]')?.value || '';
+        const type = form.querySelector('input[name="type"]:checked')?.value || '';
+        const price = form.querySelector('[name="price"]')?.value || '0';
+        const sessName = form.querySelector('[name="session_name"]')?.value || '';
+        const content = form.querySelector('[name="content"]')?.value || '';
+        const homework = form.querySelector('[name="homework_content"]')?.value || '';
+        const comment = form.querySelector('[name="general_comment"]')?.value || '';
 
         // Color — chỉ gửi nếu checkbox bật
-        const colorToggle  = document.getElementById( 'ht-sf-color-toggle' );
+        const colorToggle = document.getElementById('ht-sf-color-toggle');
         const displayColor = colorToggle?.checked
-            ? ( form.querySelector( '[name="display_color"]' )?.value || '' )
+            ? (form.querySelector('[name="display_color"]')?.value || '')
             : '';
 
         // Student IDs
-        const studentCheckboxes = form.querySelectorAll( 'input[name="student_ids"]:checked' );
-        const studentIds = Array.from( studentCheckboxes ).map( cb => cb.value );
+        const studentCheckboxes = form.querySelectorAll('input[name="student_ids"]:checked');
+        const studentIds = Array.from(studentCheckboxes).map(cb => cb.value);
 
         // M3: Repeat dates
-        const repeatToggle = document.getElementById( 'ht-sf-repeat-toggle' );
-        const isRecurring  = repeatToggle?.checked && this._repeatDates && this._repeatDates.length > 0;
+        const repeatToggle = document.getElementById('ht-sf-repeat-toggle');
+        const isRecurring = repeatToggle?.checked && this._repeatDates && this._repeatDates.length > 0;
 
         // ── Client-side validate ───────────────────────────
-        if ( ! classId ) { HT.utils.toast( 'Vui lòng chọn lớp.', 'error' ); return; }
-        if ( ! date )    { HT.utils.toast( 'Vui lòng chọn ngày.', 'error' ); return; }
-        if ( ! startTime || ! endTime ) {
-            HT.utils.toast( 'Vui lòng nhập giờ bắt đầu và kết thúc.', 'error' ); return;
+        if (!classId) { HT.utils.toast('Vui lòng chọn lớp.', 'error'); return; }
+        if (!date) { HT.utils.toast('Vui lòng chọn ngày.', 'error'); return; }
+        if (!startTime || !endTime) {
+            HT.utils.toast('Vui lòng nhập giờ bắt đầu và kết thúc.', 'error'); return;
         }
-        if ( startTime >= endTime ) {
-            HT.utils.toast( 'Giờ bắt đầu phải trước giờ kết thúc.', 'error' ); return;
+        if (startTime >= endTime) {
+            HT.utils.toast('Giờ bắt đầu phải trước giờ kết thúc.', 'error'); return;
         }
-        if ( ! type ) { HT.utils.toast( 'Vui lòng chọn loại buổi.', 'error' ); return; }
-        if ( type === 'riêng' && studentIds.length !== 1 ) {
-            HT.utils.toast( 'Buổi riêng phải chọn đúng 1 học sinh.', 'error' ); return;
+        if (!type) { HT.utils.toast('Vui lòng chọn loại buổi.', 'error'); return; }
+        if (type === 'riêng' && studentIds.length !== 1) {
+            HT.utils.toast('Buổi riêng phải chọn đúng 1 học sinh.', 'error'); return;
         }
-        if ( type === 'chung' && studentIds.length < 2 ) {
-            HT.utils.toast( 'Buổi chung phải chọn ít nhất 2 học sinh.', 'error' ); return;
+        if (type === 'chung' && studentIds.length < 2) {
+            HT.utils.toast('Buổi chung phải chọn ít nhất 2 học sinh.', 'error'); return;
         }
 
         // M3: validate recurring
-        if ( isRecurring && this._repeatDates.length > 365 ) {
-            HT.utils.toast( 'Số ngày lặp tối đa là 365.', 'error' ); return;
+        if (isRecurring && this._repeatDates.length > 365) {
+            HT.utils.toast('Số ngày lặp tối đa là 365.', 'error'); return;
         }
 
         // Payload
         const payload = {
-            class_id:         classId,
-            date:             date,
-            start_time:       startTime,
-            end_time:         endTime,
-            type:             type,
-            student_ids:      studentIds,
-            price:            price,
-            session_name:     sessName,
-            content:          content,
+            class_id: classId,
+            date: date,
+            start_time: startTime,
+            end_time: endTime,
+            type: type,
+            student_ids: studentIds,
+            price: price,
+            session_name: sessName,
+            content: content,
             homework_content: homework,
-            general_comment:  comment,
-            display_color:    displayColor,
+            general_comment: comment,
+            display_color: displayColor,
         };
 
         // M3: Thêm repeat_dates nếu recurring
-        if ( isRecurring ) {
+        if (isRecurring) {
             payload.repeat_dates = this._repeatDates;
         }
 
@@ -996,35 +1022,35 @@ const ScheduleModule = {
         const btnLabel = isRecurring ? 'Tạo buổi lặp' : 'Tạo buổi';
 
         try {
-            const saveBtn = document.getElementById( 'ht-session-form-save' );
-            if ( saveBtn ) { saveBtn.disabled = true; saveBtn.textContent = 'Đang tạo...'; }
+            const saveBtn = document.getElementById('ht-session-form-save');
+            if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Đang tạo...'; }
 
-            const result = await HT.api.call( action, payload );
+            const result = await HT.api.call(action, payload);
             HT.modal.close();
 
-            if ( isRecurring && result.created_count ) {
-                HT.utils.toast( `Đã tạo ${result.created_count} buổi học thành công.` );
+            if (isRecurring && result.created_count) {
+                HT.utils.toast(`Đã tạo ${result.created_count} buổi học thành công.`);
             } else {
-                HT.utils.toast( 'Đã tạo buổi học thành công.' );
+                HT.utils.toast('Đã tạo buổi học thành công.');
             }
             await this._render(); // Refresh calendar
-        } catch ( err ) {
+        } catch (err) {
             // Xử lý conflict 409 với structured payload
-            if ( err.status === 409 && err.serverData?.conflict ) {
+            if (err.status === 409 && err.serverData?.conflict) {
                 const c = err.serverData.conflict;
                 const conflictName = c.session_name
-                    ? `"${HT.utils.escapeHtml( c.session_name )}"`
+                    ? `"${HT.utils.escapeHtml(c.session_name)}"`
                     : 'buổi học';
-                const conflictTime = `${this._fmtTime( c.start_time )} – ${this._fmtTime( c.end_time )}`;
+                const conflictTime = `${this._fmtTime(c.start_time)} – ${this._fmtTime(c.end_time)}`;
                 HT.utils.toast(
-                    `Trùng lịch với ${conflictName} lúc ${conflictTime} ngày ${this._fmtShort( c.date )}.`,
+                    `Trùng lịch với ${conflictName} lúc ${conflictTime} ngày ${this._fmtShort(c.date)}.`,
                     'error'
                 );
             } else {
-                HT.utils.toast( err.message, 'error' );
+                HT.utils.toast(err.message, 'error');
             }
-            const saveBtn = document.getElementById( 'ht-session-form-save' );
-            if ( saveBtn ) { saveBtn.disabled = false; saveBtn.textContent = btnLabel; }
+            const saveBtn = document.getElementById('ht-session-form-save');
+            if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = btnLabel; }
         }
     },
 
@@ -1037,92 +1063,92 @@ const ScheduleModule = {
      *
      * @param {number} sessionId
      */
-    async _openEditForm( sessionId ) {
+    async _openEditForm(sessionId) {
         try {
-            const [ sessionData, classesData ] = await Promise.all( [
-                HT.api.call( 'hinteach_session_get', { session_id: sessionId }, 'GET' ),
-                HT.api.call( 'hinteach_class_list', {}, 'POST' ),
-            ] );
+            const [sessionData, classesData] = await Promise.all([
+                HT.api.call('hinteach_session_get', { session_id: sessionId }, 'GET'),
+                HT.api.call('hinteach_class_list', {}, 'POST'),
+            ]);
 
             const session = sessionData.session;
             const classes = classesData.classes || [];
 
-            if ( ! session ) {
-                HT.utils.toast( 'Không tìm thấy thông tin buổi học.', 'error' );
+            if (!session) {
+                HT.utils.toast('Không tìm thấy thông tin buổi học.', 'error');
                 return;
             }
 
             // Load học sinh của lớp hiện tại để render danh sách chọn
             let classStudents = [];
             try {
-                const classDetail = await HT.api.call( 'hinteach_class_get', { class_id: session.class_id }, 'GET' );
+                const classDetail = await HT.api.call('hinteach_class_get', { class_id: session.class_id }, 'GET');
                 classStudents = classDetail.students || [];
-            } catch ( e ) {
-                classStudents = ( session.students || [] ).map( s => ( { id: s.student_id, name: s.name } ) );
+            } catch (e) {
+                classStudents = (session.students || []).map(s => ({ id: s.student_id, name: s.name }));
             }
 
-            HT.modal.open( {
+            HT.modal.open({
                 title: 'Chỉnh sửa buổi học',
-                body: this._buildEditFormHtml( classes, session, classStudents ),
+                body: this._buildEditFormHtml(classes, session, classStudents),
                 footer: `
                     <button type="button" class="ht-btn ht-btn--danger ht-btn--ghost" id="ht-session-form-delete" style="margin-right:auto;">Xoá buổi</button>
                     <button type="button" class="ht-btn ht-btn--secondary" id="ht-session-form-cancel">Huỷ</button>
                     <button type="button" class="ht-btn ht-btn--primary" id="ht-session-form-quick-entry" style="background:var(--ht-success,#16a34a);">Lưu nhật ký</button>
                     <button type="button" class="ht-btn ht-btn--primary" id="ht-session-form-update">Lưu thay đổi</button>
                 `,
-            } );
+            });
 
             // Bind events
-            document.getElementById( 'ht-session-form-cancel' )
-                ?.addEventListener( 'click', () => HT.modal.close() );
-            document.getElementById( 'ht-session-form-update' )
-                ?.addEventListener( 'click', () => this._updateSession( session ) );
-            document.getElementById( 'ht-session-form-delete' )
-                ?.addEventListener( 'click', () => this._deleteSession( session ) );
-            document.getElementById( 'ht-session-form-quick-entry' )
-                ?.addEventListener( 'click', () => this._saveQuickEntry( session ) );
-            document.getElementById( 'ht-sf-class' )
-                ?.addEventListener( 'change', ( e ) => this._onClassChange( e.target.value ) );
-            document.querySelectorAll( 'input[name="type"]' ).forEach( r => {
-                r.addEventListener( 'change', () => this._onTypeChange() );
-            } );
-            document.getElementById( 'ht-sf-color-toggle' )
-                ?.addEventListener( 'change', ( e ) => {
-                    const colorInput = document.getElementById( 'ht-sf-color' );
-                    if ( colorInput ) colorInput.disabled = ! e.target.checked;
-                } );
+            document.getElementById('ht-session-form-cancel')
+                ?.addEventListener('click', () => HT.modal.close());
+            document.getElementById('ht-session-form-update')
+                ?.addEventListener('click', () => this._updateSession(session));
+            document.getElementById('ht-session-form-delete')
+                ?.addEventListener('click', () => this._deleteSession(session));
+            document.getElementById('ht-session-form-quick-entry')
+                ?.addEventListener('click', () => this._saveQuickEntry(session));
+            document.getElementById('ht-sf-class')
+                ?.addEventListener('change', (e) => this._onClassChange(e.target.value));
+            document.querySelectorAll('input[name="type"]').forEach(r => {
+                r.addEventListener('change', () => this._onTypeChange());
+            });
+            document.getElementById('ht-sf-color-toggle')
+                ?.addEventListener('change', (e) => {
+                    const colorInput = document.getElementById('ht-sf-color');
+                    if (colorInput) colorInput.disabled = !e.target.checked;
+                });
 
             // M5: Bind score group add button + initialize score group counter
             this._scoreGroupCounter = 0;
-            document.getElementById( 'ht-score-add-group' )
-                ?.addEventListener( 'click', () => this._addScoreGroup( session ) );
+            document.getElementById('ht-score-add-group')
+                ?.addEventListener('click', () => this._addScoreGroup(session));
 
             // M5: Render existing score groups if session.grades exists
-            if ( session.grades && session.grades.length ) {
+            if (session.grades && session.grades.length) {
                 const existingGroupsMap = new Map();
-                session.grades.forEach( g => {
-                    const scoreType = g.score_type_label || ( g.type === 'homework' ? 'BTVN' : ( g.type === 'final' ? 'Cuối kỳ' : '' ) );
+                session.grades.forEach(g => {
+                    const scoreType = g.score_type_label || (g.type === 'homework' ? 'BTVN' : (g.type === 'final' ? 'Cuối kỳ' : ''));
                     const key = `${g.test_name}___${g.scale}___${scoreType}`;
-                    if ( ! existingGroupsMap.has( key ) ) {
-                        existingGroupsMap.set( key, {
+                    if (!existingGroupsMap.has(key)) {
+                        existingGroupsMap.set(key, {
                             score_type: scoreType,
-                            test_name:  g.test_name,
-                            max_score:  parseFloat( g.scale ) || 10,
-                            entries:    {},
-                        } );
+                            test_name: g.test_name,
+                            max_score: parseFloat(g.scale) || 10,
+                            entries: {},
+                        });
                     }
-                    existingGroupsMap.get( key ).entries[ parseInt( g.student_id, 10 ) ] = {
-                        score_value: g.score !== null && g.score !== undefined ? parseFloat( g.score ) : null,
-                        score_note:  g.note || '',
+                    existingGroupsMap.get(key).entries[parseInt(g.student_id, 10)] = {
+                        score_value: g.score !== null && g.score !== undefined ? parseFloat(g.score) : null,
+                        score_note: g.note || '',
                     };
-                } );
+                });
 
-                existingGroupsMap.forEach( groupData => {
-                    this._addScoreGroup( session, groupData );
-                } );
+                existingGroupsMap.forEach(groupData => {
+                    this._addScoreGroup(session, groupData);
+                });
             }
-        } catch ( err ) {
-            HT.utils.toast( 'Không thể tải thông tin buổi học: ' + err.message, 'error' );
+        } catch (err) {
+            HT.utils.toast('Không thể tải thông tin buổi học: ' + err.message, 'error');
         }
     },
 
@@ -1134,13 +1160,13 @@ const ScheduleModule = {
      * @param {Array} classStudents
      * @returns {string} HTML string
      */
-    _buildEditFormHtml( classes, session, classStudents ) {
-        const assignedStudentIds = ( session.students || [] ).map( s => parseInt( s.student_id, 10 ) );
-        const isRecurring        = !! session.repeat_group_id;
-        const followingCount     = session.following_count || 0;
-        const hasCustomColor     = !! session.display_color;
-        const startTime          = session.start_time ? session.start_time.slice( 0, 5 ) : '';
-        const endTime            = session.end_time ? session.end_time.slice( 0, 5 ) : '';
+    _buildEditFormHtml(classes, session, classStudents) {
+        const assignedStudentIds = (session.students || []).map(s => parseInt(s.student_id, 10));
+        const isRecurring = !!session.repeat_group_id;
+        const followingCount = session.following_count || 0;
+        const hasCustomColor = !!session.display_color;
+        const startTime = session.start_time ? session.start_time.slice(0, 5) : '';
+        const endTime = session.end_time ? session.end_time.slice(0, 5) : '';
 
         const typeHint = session.type === 'riêng' ? '(chọn 1)' : '(chọn ít nhất 2)';
 
@@ -1159,11 +1185,11 @@ const ScheduleModule = {
                         <label class="ht-form__label" for="ht-sf-class">Lớp *</label>
                         <select id="ht-sf-class" name="class_id" class="ht-form__select" required>
                             <option value="">-- Chọn lớp --</option>
-                            ${classes.map( c => `
-                                <option value="${c.id}" data-fee="${c.fee_amount || 0}" ${Number( c.id ) === Number( session.class_id ) ? 'selected' : ''}>
-                                    ${HT.utils.escapeHtml( c.name )}
+                            ${classes.map(c => `
+                                <option value="${c.id}" data-fee="${c.fee_amount || 0}" ${Number(c.id) === Number(session.class_id) ? 'selected' : ''}>
+                                    ${HT.utils.escapeHtml(c.name)}
                                 </option>
-                            ` ).join( '' )}
+                            ` ).join('')}
                         </select>
                     </div>
                 </fieldset>
@@ -1198,12 +1224,12 @@ const ScheduleModule = {
                     <div class="ht-form__row" id="ht-sf-students-container">
                         <label class="ht-form__label">Học sinh * ${typeHint}</label>
                         <div class="ht-multi-select" id="ht-sf-students">
-                            ${classStudents.map( s => `
+                            ${classStudents.map(s => `
                                 <label class="ht-multi-select__item">
-                                    <input type="checkbox" name="student_ids" value="${s.id}" ${assignedStudentIds.includes( parseInt( s.id, 10 ) ) ? 'checked' : ''} />
-                                    <span>${HT.utils.escapeHtml( s.name )}</span>
+                                    <input type="checkbox" name="student_ids" value="${s.id}" ${assignedStudentIds.includes(parseInt(s.id, 10)) ? 'checked' : ''} />
+                                    <span>${HT.utils.escapeHtml(s.name)}</span>
                                 </label>
-                            ` ).join( '' )}
+                            ` ).join('')}
                         </div>
                     </div>
                 </fieldset>
@@ -1216,19 +1242,19 @@ const ScheduleModule = {
                     </div>
                     <div class="ht-form__row">
                         <label class="ht-form__label" for="ht-sf-name">Tên buổi học</label>
-                        <input type="text" id="ht-sf-name" name="session_name" class="ht-form__input" placeholder="(Tuỳ chọn)" value="${HT.utils.escapeHtml( session.session_name || '' )}" />
+                        <input type="text" id="ht-sf-name" name="session_name" class="ht-form__input" placeholder="(Tuỳ chọn)" value="${HT.utils.escapeHtml(session.session_name || '')}" />
                     </div>
                     <div class="ht-form__row">
                         <label class="ht-form__label" for="ht-sf-content">Nội dung buổi học</label>
-                        <textarea id="ht-sf-content" name="content" class="ht-form__textarea" rows="2" placeholder="(Tuỳ chọn)">${HT.utils.escapeHtml( session.content || '' )}</textarea>
+                        <textarea id="ht-sf-content" name="content" class="ht-form__textarea" rows="2" placeholder="(Tuỳ chọn)">${HT.utils.escapeHtml(session.content || '')}</textarea>
                     </div>
                     <div class="ht-form__row">
                         <label class="ht-form__label" for="ht-sf-homework">Nội dung bài tập về nhà</label>
-                        <textarea id="ht-sf-homework" name="homework_content" class="ht-form__textarea" rows="2" placeholder="(Tuỳ chọn)">${HT.utils.escapeHtml( session.homework_content || '' )}</textarea>
+                        <textarea id="ht-sf-homework" name="homework_content" class="ht-form__textarea" rows="2" placeholder="(Tuỳ chọn)">${HT.utils.escapeHtml(session.homework_content || '')}</textarea>
                     </div>
                     <div class="ht-form__row">
                         <label class="ht-form__label" for="ht-sf-comment">Nhận xét chung</label>
-                        <textarea id="ht-sf-comment" name="general_comment" class="ht-form__textarea" rows="2" placeholder="(Tuỳ chọn)">${HT.utils.escapeHtml( session.general_comment || '' )}</textarea>
+                        <textarea id="ht-sf-comment" name="general_comment" class="ht-form__textarea" rows="2" placeholder="(Tuỳ chọn)">${HT.utils.escapeHtml(session.general_comment || '')}</textarea>
                     </div>
                     <div class="ht-form__row">
                         <label class="ht-form__label">Màu hiển thị</label>
@@ -1242,7 +1268,7 @@ const ScheduleModule = {
                     </div>
                 </fieldset>
 
-                ${this._buildJournalFieldsetHtml( session )}
+                ${this._buildJournalFieldsetHtml(session)}
 
                 <fieldset class="ht-form__fieldset">
                     <legend>Điểm buổi học</legend>
@@ -1263,25 +1289,25 @@ const ScheduleModule = {
      * @param {Object} session — session data from hinteach_session_get
      * @returns {string} HTML string
      */
-    _buildJournalFieldsetHtml( session ) {
+    _buildJournalFieldsetHtml(session) {
         const students = session.students || [];
-        if ( ! students.length ) return '';
+        if (!students.length) return '';
 
-        const homeworkOptions = [ '', '0%', '30%', '50%', '70%', '100%' ];
+        const homeworkOptions = ['', '0%', '30%', '50%', '70%', '100%'];
 
-        const cards = students.map( s => {
-            const sid  = s.student_id;
-            const name = HT.utils.escapeHtml( s.name || `Học sinh #${sid}` );
+        const cards = students.map(s => {
+            const sid = s.student_id;
+            const name = HT.utils.escapeHtml(s.name || `Học sinh #${sid}`);
 
-            const hwValue  = s.homework || '';
-            const attValue = HT.utils.escapeHtml( s.attitude || '' );
-            const icValue  = HT.utils.escapeHtml( s.individual_comment || '' );
-            const ntValue  = HT.utils.escapeHtml( s.note || '' );
+            const hwValue = s.homework || '';
+            const attValue = HT.utils.escapeHtml(s.attitude || '');
+            const icValue = HT.utils.escapeHtml(s.individual_comment || '');
+            const ntValue = HT.utils.escapeHtml(s.note || '');
 
-            const hwOptions = homeworkOptions.map( v => {
+            const hwOptions = homeworkOptions.map(v => {
                 const label = v === '' ? '-- Chọn --' : v;
                 return `<option value="${v}" ${v === hwValue ? 'selected' : ''}>${label}</option>`;
-            } ).join( '' );
+            }).join('');
 
             return `
                 <div class="ht-journal-card" data-student-id="${sid}">
@@ -1308,7 +1334,7 @@ const ScheduleModule = {
                     </div>
                 </div>
             `;
-        } ).join( '' );
+        }).join('');
 
         return `
             <fieldset class="ht-form__fieldset">
@@ -1326,21 +1352,21 @@ const ScheduleModule = {
      * @param {Object|null} initialData — optional existing group data { score_type, test_name, max_score, entries }
      * @returns {string} HTML string
      */
-    _buildScoreGroupHtml( session, groupIndex, initialData = null ) {
+    _buildScoreGroupHtml(session, groupIndex, initialData = null) {
         const students = session.students || [];
         const gid = `ht-sg-${groupIndex}`;
 
-        const initScoreType = initialData ? HT.utils.escapeHtml( initialData.score_type || '' ) : '';
-        const initTestName  = initialData ? HT.utils.escapeHtml( initialData.test_name || '' ) : '';
-        const initMaxScore  = initialData ? ( initialData.max_score || 10 ) : 10;
-        const initEntries   = initialData?.entries || {};
+        const initScoreType = initialData ? HT.utils.escapeHtml(initialData.score_type || '') : '';
+        const initTestName = initialData ? HT.utils.escapeHtml(initialData.test_name || '') : '';
+        const initMaxScore = initialData ? (initialData.max_score || 10) : 10;
+        const initEntries = initialData?.entries || {};
 
-        const studentRows = students.map( s => {
-            const sid  = s.student_id;
-            const name = HT.utils.escapeHtml( s.name || `#${sid}` );
-            const entry = initEntries[ sid ] || null;
+        const studentRows = students.map(s => {
+            const sid = s.student_id;
+            const name = HT.utils.escapeHtml(s.name || `#${sid}`);
+            const entry = initEntries[sid] || null;
             const scoreVal = entry && entry.score_value !== null && entry.score_value !== undefined ? entry.score_value : '';
-            const scoreNote = entry ? HT.utils.escapeHtml( entry.score_note || '' ) : '';
+            const scoreNote = entry ? HT.utils.escapeHtml(entry.score_note || '') : '';
 
             return `
                 <tr>
@@ -1349,7 +1375,7 @@ const ScheduleModule = {
                     <td><input type="text" class="ht-form__input" data-field="score_note" data-sid="${sid}" maxlength="500" placeholder="Ghi chú" value="${scoreNote}" /></td>
                 </tr>
             `;
-        } ).join( '' );
+        }).join('');
 
         return `
             <div class="ht-score-group" data-group-index="${groupIndex}" id="${gid}">
@@ -1384,18 +1410,18 @@ const ScheduleModule = {
      * @param {Object} session
      * @param {Object|null} initialData
      */
-    _addScoreGroup( session, initialData = null ) {
-        const container = document.getElementById( 'ht-score-groups-container' );
-        if ( ! container ) return;
+    _addScoreGroup(session, initialData = null) {
+        const container = document.getElementById('ht-score-groups-container');
+        if (!container) return;
 
-        this._scoreGroupCounter = ( this._scoreGroupCounter || 0 ) + 1;
-        const html = this._buildScoreGroupHtml( session, this._scoreGroupCounter, initialData );
-        container.insertAdjacentHTML( 'beforeend', html );
+        this._scoreGroupCounter = (this._scoreGroupCounter || 0) + 1;
+        const html = this._buildScoreGroupHtml(session, this._scoreGroupCounter, initialData);
+        container.insertAdjacentHTML('beforeend', html);
 
         // Bind remove
-        const groupEl = document.getElementById( `ht-sg-${this._scoreGroupCounter}` );
-        const removeBtn = groupEl?.querySelector( '.ht-score-group__remove' );
-        removeBtn?.addEventListener( 'click', () => groupEl.remove() );
+        const groupEl = document.getElementById(`ht-sg-${this._scoreGroupCounter}`);
+        const removeBtn = groupEl?.querySelector('.ht-score-group__remove');
+        removeBtn?.addEventListener('click', () => groupEl.remove());
     },
 
     /**
@@ -1404,60 +1430,60 @@ const ScheduleModule = {
      * @returns {{ studentDetails: Object, scoreGroups: Array }}
      */
     _collectQuickEntryPayload() {
-        const form = document.getElementById( 'ht-session-form' );
-        if ( ! form ) {
+        const form = document.getElementById('ht-session-form');
+        if (!form) {
             return { content: '', homeworkContent: '', sessionName: '', generalComment: '', studentDetails: {}, scoreGroups: [] };
         }
 
         // Session-level (same fields already in edit form)
-        const content         = form.querySelector( '[name="content"]' )?.value ?? '';
-        const homeworkContent = form.querySelector( '[name="homework_content"]' )?.value ?? '';
-        const sessionName     = form.querySelector( '[name="session_name"]' )?.value ?? '';
-        const generalComment  = form.querySelector( '[name="general_comment"]' )?.value ?? '';
+        const content = form.querySelector('[name="content"]')?.value ?? '';
+        const homeworkContent = form.querySelector('[name="homework_content"]')?.value ?? '';
+        const sessionName = form.querySelector('[name="session_name"]')?.value ?? '';
+        const generalComment = form.querySelector('[name="general_comment"]')?.value ?? '';
 
         // Per-student journal (scoped to form)
         const studentDetails = {};
-        form.querySelectorAll( '.ht-journal-card' ).forEach( card => {
+        form.querySelectorAll('.ht-journal-card').forEach(card => {
             const sid = card.dataset.studentId;
-            if ( ! sid ) return;
-            studentDetails[ sid ] = {
-                homework:           card.querySelector( '.ht-qe-homework' )?.value ?? '',
-                attitude:           card.querySelector( '.ht-qe-attitude' )?.value ?? '',
-                individual_comment: card.querySelector( '.ht-qe-comment' )?.value ?? '',
-                note:               card.querySelector( '.ht-qe-note' )?.value ?? '',
+            if (!sid) return;
+            studentDetails[sid] = {
+                homework: card.querySelector('.ht-qe-homework')?.value ?? '',
+                attitude: card.querySelector('.ht-qe-attitude')?.value ?? '',
+                individual_comment: card.querySelector('.ht-qe-comment')?.value ?? '',
+                note: card.querySelector('.ht-qe-note')?.value ?? '',
             };
-        } );
+        });
 
         // Score groups (scoped to form)
         const scoreGroups = [];
-        form.querySelectorAll( '.ht-score-group' ).forEach( groupEl => {
-            const scoreType = groupEl.querySelector( '[data-field="score_type"]' )?.value ?? '';
-            const testName  = groupEl.querySelector( '[data-field="test_name"]' )?.value ?? '';
-            const maxScore  = parseFloat( groupEl.querySelector( '[data-field="max_score"]' )?.value ) || 0;
+        form.querySelectorAll('.ht-score-group').forEach(groupEl => {
+            const scoreType = groupEl.querySelector('[data-field="score_type"]')?.value ?? '';
+            const testName = groupEl.querySelector('[data-field="test_name"]')?.value ?? '';
+            const maxScore = parseFloat(groupEl.querySelector('[data-field="max_score"]')?.value) || 0;
 
             const entries = [];
-            groupEl.querySelectorAll( 'tbody tr' ).forEach( row => {
-                const scoreInput = row.querySelector( '[data-field="score_value"]' );
-                const noteInput  = row.querySelector( '[data-field="score_note"]' );
-                if ( ! scoreInput ) return;
+            groupEl.querySelectorAll('tbody tr').forEach(row => {
+                const scoreInput = row.querySelector('[data-field="score_value"]');
+                const noteInput = row.querySelector('[data-field="score_note"]');
+                if (!scoreInput) return;
 
-                const sid        = scoreInput.dataset.sid;
-                const scoreValue = scoreInput.value !== '' ? parseFloat( scoreInput.value ) : null;
-                const scoreNote  = noteInput?.value ?? '';
+                const sid = scoreInput.dataset.sid;
+                const scoreValue = scoreInput.value !== '' ? parseFloat(scoreInput.value) : null;
+                const scoreNote = noteInput?.value ?? '';
 
-                entries.push( {
-                    student_id:  parseInt( sid, 10 ),
+                entries.push({
+                    student_id: parseInt(sid, 10),
                     score_value: scoreValue,
-                    score_note:  scoreNote,
-                } );
-            } );
+                    score_note: scoreNote,
+                });
+            });
 
             // Only include groups with at least 1 entry that has a score
-            const hasAnyScore = entries.some( e => e.score_value !== null );
-            if ( hasAnyScore ) {
-                scoreGroups.push( { score_type: scoreType, test_name: testName, max_score: maxScore, entries } );
+            const hasAnyScore = entries.some(e => e.score_value !== null);
+            if (hasAnyScore) {
+                scoreGroups.push({ score_type: scoreType, test_name: testName, max_score: maxScore, entries });
             }
-        } );
+        });
 
         return { content, homeworkContent, sessionName, generalComment, studentDetails, scoreGroups };
     },
@@ -1469,21 +1495,21 @@ const ScheduleModule = {
      *
      * @param {Object} currentSession
      */
-    async _saveQuickEntry( currentSession ) {
+    async _saveQuickEntry(currentSession) {
         const payload = this._collectQuickEntryPayload();
 
         // Client-side validation
-        for ( const group of payload.scoreGroups ) {
-            if ( ! group.test_name.trim() ) {
-                HT.utils.toast( 'Vui lòng nhập tên bài kiểm tra cho tất cả nhóm điểm.', 'error' );
+        for (const group of payload.scoreGroups) {
+            if (!group.test_name.trim()) {
+                HT.utils.toast('Vui lòng nhập tên bài kiểm tra cho tất cả nhóm điểm.', 'error');
                 return;
             }
-            if ( group.max_score <= 0 ) {
-                HT.utils.toast( 'Thang điểm tối đa phải lớn hơn 0.', 'error' );
+            if (group.max_score <= 0) {
+                HT.utils.toast('Thang điểm tối đa phải lớn hơn 0.', 'error');
                 return;
             }
-            for ( const entry of group.entries ) {
-                if ( entry.score_value !== null && ( entry.score_value < 0 || entry.score_value > group.max_score ) ) {
+            for (const entry of group.entries) {
+                if (entry.score_value !== null && (entry.score_value < 0 || entry.score_value > group.max_score)) {
                     HT.utils.toast(
                         `Điểm số phải nằm trong khoảng 0 – ${group.max_score}.`,
                         'error'
@@ -1494,32 +1520,32 @@ const ScheduleModule = {
         }
 
         const apiPayload = {
-            session_id:       currentSession.id,
-            content:          payload.content,
+            session_id: currentSession.id,
+            content: payload.content,
             homework_content: payload.homeworkContent,
-            session_name:     payload.sessionName,
-            general_comment:  payload.generalComment,
-            student_details:  JSON.stringify( payload.studentDetails ),
-            score_groups:     JSON.stringify( payload.scoreGroups ),
+            session_name: payload.sessionName,
+            general_comment: payload.generalComment,
+            student_details: JSON.stringify(payload.studentDetails),
+            score_groups: JSON.stringify(payload.scoreGroups),
         };
 
         try {
-            const btn = document.getElementById( 'ht-session-form-quick-entry' );
-            if ( btn ) { btn.disabled = true; btn.textContent = 'Đang lưu...'; }
+            const btn = document.getElementById('ht-session-form-quick-entry');
+            if (btn) { btn.disabled = true; btn.textContent = 'Đang lưu...'; }
 
-            const result = await HT.api.call( 'hinteach_session_quick_entry', apiPayload );
+            const result = await HT.api.call('hinteach_session_quick_entry', apiPayload);
 
             let msg = result.message || 'Đã lưu nhật ký buổi học.';
-            if ( result.created_scores && result.created_scores.length ) {
+            if (result.created_scores && result.created_scores.length) {
                 msg += ` (${result.created_scores.length} điểm)`;
             }
-            HT.utils.toast( msg );
+            HT.utils.toast(msg);
 
-            if ( btn ) { btn.disabled = false; btn.textContent = 'Lưu nhật ký'; }
-        } catch ( err ) {
-            HT.utils.toast( err.message || 'Không thể lưu nhật ký.', 'error' );
-            const btn = document.getElementById( 'ht-session-form-quick-entry' );
-            if ( btn ) { btn.disabled = false; btn.textContent = 'Lưu nhật ký'; }
+            if (btn) { btn.disabled = false; btn.textContent = 'Lưu nhật ký'; }
+        } catch (err) {
+            HT.utils.toast(err.message || 'Không thể lưu nhật ký.', 'error');
+            const btn = document.getElementById('ht-session-form-quick-entry');
+            if (btn) { btn.disabled = false; btn.textContent = 'Lưu nhật ký'; }
         }
     },
 
@@ -1530,12 +1556,12 @@ const ScheduleModule = {
      * @param {number} followingCount Số buổi sau
      * @returns {Promise<'single'|'following'|null>}
      */
-    _askScope( actionText = 'cập nhật', followingCount = 0 ) {
-        return new Promise( ( resolve ) => {
+    _askScope(actionText = 'cập nhật', followingCount = 0) {
+        return new Promise((resolve) => {
             let resolved = false;
             const totalFollowing = followingCount + 1;
 
-            HT.modal.open( {
+            HT.modal.open({
                 title: `Tuỳ chọn ${actionText} buổi học`,
                 body: `
                     <p style="margin-bottom:16px;">Buổi học này thuộc một chuỗi lặp. Bạn muốn ${actionText} như thế nào?</p>
@@ -1554,30 +1580,30 @@ const ScheduleModule = {
                     <button type="button" class="ht-btn ht-btn--ghost" id="ht-scope-cancel">Huỷ</button>
                 `,
                 onClose: () => {
-                    if ( resolved ) return;
+                    if (resolved) return;
                     resolved = true;
-                    resolve( null );
+                    resolve(null);
                 },
-            } );
+            });
 
-            document.getElementById( 'ht-scope-single' )?.addEventListener( 'click', () => {
+            document.getElementById('ht-scope-single')?.addEventListener('click', () => {
                 resolved = true;
                 HT.modal.close();
-                resolve( 'single' );
-            } );
+                resolve('single');
+            });
 
-            document.getElementById( 'ht-scope-following' )?.addEventListener( 'click', () => {
+            document.getElementById('ht-scope-following')?.addEventListener('click', () => {
                 resolved = true;
                 HT.modal.close();
-                resolve( 'following' );
-            } );
+                resolve('following');
+            });
 
-            document.getElementById( 'ht-scope-cancel' )?.addEventListener( 'click', () => {
+            document.getElementById('ht-scope-cancel')?.addEventListener('click', () => {
                 resolved = true;
                 HT.modal.close();
-                resolve( null );
-            } );
-        } );
+                resolve(null);
+            });
+        });
     },
 
     /**
@@ -1585,101 +1611,101 @@ const ScheduleModule = {
      *
      * @param {Object} currentSession
      */
-    async _updateSession( currentSession ) {
-        const form = document.getElementById( 'ht-session-form' );
-        if ( ! form ) return;
+    async _updateSession(currentSession) {
+        const form = document.getElementById('ht-session-form');
+        if (!form) return;
 
-        const classId   = form.querySelector( '[name="class_id"]' )?.value || '';
-        const date      = form.querySelector( '[name="date"]' )?.value || '';
-        const startTime = form.querySelector( '[name="start_time"]' )?.value || '';
-        const endTime   = form.querySelector( '[name="end_time"]' )?.value || '';
-        const type      = form.querySelector( 'input[name="type"]:checked' )?.value || '';
-        const price     = form.querySelector( '[name="price"]' )?.value || '0';
-        const sessName  = form.querySelector( '[name="session_name"]' )?.value || '';
-        const content   = form.querySelector( '[name="content"]' )?.value || '';
-        const homework  = form.querySelector( '[name="homework_content"]' )?.value || '';
-        const comment   = form.querySelector( '[name="general_comment"]' )?.value || '';
+        const classId = form.querySelector('[name="class_id"]')?.value || '';
+        const date = form.querySelector('[name="date"]')?.value || '';
+        const startTime = form.querySelector('[name="start_time"]')?.value || '';
+        const endTime = form.querySelector('[name="end_time"]')?.value || '';
+        const type = form.querySelector('input[name="type"]:checked')?.value || '';
+        const price = form.querySelector('[name="price"]')?.value || '0';
+        const sessName = form.querySelector('[name="session_name"]')?.value || '';
+        const content = form.querySelector('[name="content"]')?.value || '';
+        const homework = form.querySelector('[name="homework_content"]')?.value || '';
+        const comment = form.querySelector('[name="general_comment"]')?.value || '';
 
-        const colorToggle  = document.getElementById( 'ht-sf-color-toggle' );
+        const colorToggle = document.getElementById('ht-sf-color-toggle');
         const displayColor = colorToggle?.checked
-            ? ( form.querySelector( '[name="display_color"]' )?.value || '' )
+            ? (form.querySelector('[name="display_color"]')?.value || '')
             : '';
 
-        const studentCheckboxes = form.querySelectorAll( 'input[name="student_ids"]:checked' );
-        const studentIds = Array.from( studentCheckboxes ).map( cb => cb.value );
+        const studentCheckboxes = form.querySelectorAll('input[name="student_ids"]:checked');
+        const studentIds = Array.from(studentCheckboxes).map(cb => cb.value);
 
         // Validate
-        if ( ! classId ) { HT.utils.toast( 'Vui lòng chọn lớp.', 'error' ); return; }
-        if ( ! date )    { HT.utils.toast( 'Vui lòng chọn ngày.', 'error' ); return; }
-        if ( ! startTime || ! endTime ) {
-            HT.utils.toast( 'Vui lòng nhập giờ bắt đầu và kết thúc.', 'error' ); return;
+        if (!classId) { HT.utils.toast('Vui lòng chọn lớp.', 'error'); return; }
+        if (!date) { HT.utils.toast('Vui lòng chọn ngày.', 'error'); return; }
+        if (!startTime || !endTime) {
+            HT.utils.toast('Vui lòng nhập giờ bắt đầu và kết thúc.', 'error'); return;
         }
-        if ( startTime >= endTime ) {
-            HT.utils.toast( 'Giờ bắt đầu phải trước giờ kết thúc.', 'error' ); return;
+        if (startTime >= endTime) {
+            HT.utils.toast('Giờ bắt đầu phải trước giờ kết thúc.', 'error'); return;
         }
-        if ( ! type ) { HT.utils.toast( 'Vui lòng chọn loại buổi.', 'error' ); return; }
-        if ( type === 'riêng' && studentIds.length !== 1 ) {
-            HT.utils.toast( 'Buổi riêng phải chọn đúng 1 học sinh.', 'error' ); return;
+        if (!type) { HT.utils.toast('Vui lòng chọn loại buổi.', 'error'); return; }
+        if (type === 'riêng' && studentIds.length !== 1) {
+            HT.utils.toast('Buổi riêng phải chọn đúng 1 học sinh.', 'error'); return;
         }
-        if ( type === 'chung' && studentIds.length < 2 ) {
-            HT.utils.toast( 'Buổi chung phải chọn ít nhất 2 học sinh.', 'error' ); return;
+        if (type === 'chung' && studentIds.length < 2) {
+            HT.utils.toast('Buổi chung phải chọn ít nhất 2 học sinh.', 'error'); return;
         }
 
         // Scope
         let scope = 'single';
-        if ( currentSession.repeat_group_id && currentSession.following_count > 0 ) {
-            scope = await this._askScope( 'cập nhật', currentSession.following_count );
-            if ( ! scope ) {
+        if (currentSession.repeat_group_id && currentSession.following_count > 0) {
+            scope = await this._askScope('cập nhật', currentSession.following_count);
+            if (!scope) {
                 return; // User cancelled
             }
         }
 
         const payload = {
-            session_id:       currentSession.id,
-            update_scope:     scope,
-            class_id:         classId,
-            date:             date,
-            start_time:       startTime,
-            end_time:         endTime,
-            type:             type,
-            student_ids:      studentIds,
-            price:            price,
-            session_name:     sessName,
-            content:          content,
+            session_id: currentSession.id,
+            update_scope: scope,
+            class_id: classId,
+            date: date,
+            start_time: startTime,
+            end_time: endTime,
+            type: type,
+            student_ids: studentIds,
+            price: price,
+            session_name: sessName,
+            content: content,
             homework_content: homework,
-            general_comment:  comment,
-            display_color:    displayColor,
+            general_comment: comment,
+            display_color: displayColor,
         };
 
         try {
-            const updateBtn = document.getElementById( 'ht-session-form-update' );
-            if ( updateBtn ) { updateBtn.disabled = true; updateBtn.textContent = 'Đang lưu...'; }
+            const updateBtn = document.getElementById('ht-session-form-update');
+            if (updateBtn) { updateBtn.disabled = true; updateBtn.textContent = 'Đang lưu...'; }
 
-            const result = await HT.api.call( 'hinteach_session_save', payload );
+            const result = await HT.api.call('hinteach_session_save', payload);
             HT.modal.close();
 
-            if ( result.scope === 'following' && result.updated_count ) {
-                HT.utils.toast( `Đã cập nhật ${result.updated_count} buổi trong chuỗi lặp.` );
+            if (result.scope === 'following' && result.updated_count) {
+                HT.utils.toast(`Đã cập nhật ${result.updated_count} buổi trong chuỗi lặp.`);
             } else {
-                HT.utils.toast( result.message || 'Đã cập nhật buổi học thành công.' );
+                HT.utils.toast(result.message || 'Đã cập nhật buổi học thành công.');
             }
             await this._render();
-        } catch ( err ) {
-            if ( err.status === 409 && err.serverData?.conflict ) {
+        } catch (err) {
+            if (err.status === 409 && err.serverData?.conflict) {
                 const c = err.serverData.conflict;
                 const conflictName = c.session_name
-                    ? `"${HT.utils.escapeHtml( c.session_name )}"`
+                    ? `"${HT.utils.escapeHtml(c.session_name)}"`
                     : 'buổi học';
-                const conflictTime = `${this._fmtTime( c.start_time )} – ${this._fmtTime( c.end_time )}`;
+                const conflictTime = `${this._fmtTime(c.start_time)} – ${this._fmtTime(c.end_time)}`;
                 HT.utils.toast(
-                    `Trùng lịch với ${conflictName} lúc ${conflictTime} ngày ${this._fmtShort( c.date )}.`,
+                    `Trùng lịch với ${conflictName} lúc ${conflictTime} ngày ${this._fmtShort(c.date)}.`,
                     'error'
                 );
             } else {
-                HT.utils.toast( err.message, 'error' );
+                HT.utils.toast(err.message, 'error');
             }
-            const updateBtn = document.getElementById( 'ht-session-form-update' );
-            if ( updateBtn ) { updateBtn.disabled = false; updateBtn.textContent = 'Lưu thay đổi'; }
+            const updateBtn = document.getElementById('ht-session-form-update');
+            if (updateBtn) { updateBtn.disabled = false; updateBtn.textContent = 'Lưu thay đổi'; }
         }
     },
 
@@ -1688,11 +1714,11 @@ const ScheduleModule = {
      *
      * @param {Object} currentSession
      */
-    async _deleteSession( currentSession ) {
+    async _deleteSession(currentSession) {
         let scope = 'single';
-        if ( currentSession.repeat_group_id && currentSession.following_count > 0 ) {
-            scope = await this._askScope( 'xoá', currentSession.following_count );
-            if ( ! scope ) {
+        if (currentSession.repeat_group_id && currentSession.following_count > 0) {
+            scope = await this._askScope('xoá', currentSession.following_count);
+            if (!scope) {
                 return;
             }
         }
@@ -1701,26 +1727,26 @@ const ScheduleModule = {
             ? `Bạn có chắc chắn muốn xoá buổi học này và ${currentSession.following_count} buổi tiếp theo trong chuỗi lặp?`
             : 'Bạn có chắc chắn muốn xoá buổi học này?';
 
-        const confirmed = await HT.modal.confirm( confirmMsg );
-        if ( ! confirmed ) return;
+        const confirmed = await HT.modal.confirm(confirmMsg);
+        if (!confirmed) return;
 
         try {
-            const result = await HT.api.call( 'hinteach_session_delete', {
+            const result = await HT.api.call('hinteach_session_delete', {
                 session_id: currentSession.id,
-                scope:      scope,
-            } );
+                scope: scope,
+            });
 
             HT.modal.close();
 
-            if ( result.scope === 'following' && result.deleted_count ) {
-                HT.utils.toast( `Đã xoá ${result.deleted_count} buổi trong chuỗi lặp.` );
+            if (result.scope === 'following' && result.deleted_count) {
+                HT.utils.toast(`Đã xoá ${result.deleted_count} buổi trong chuỗi lặp.`);
             } else {
-                HT.utils.toast( result.message || 'Đã xoá buổi học.' );
+                HT.utils.toast(result.message || 'Đã xoá buổi học.');
             }
 
             await this._render();
-        } catch ( err ) {
-            HT.utils.toast( err.message, 'error' );
+        } catch (err) {
+            HT.utils.toast(err.message, 'error');
         }
     },
 
@@ -1730,7 +1756,7 @@ const ScheduleModule = {
 
     /** Đóng context menu hiện tại nếu có */
     _dismissContextMenu() {
-        if ( this._contextMenuEl ) {
+        if (this._contextMenuEl) {
             this._contextMenuEl.remove();
             this._contextMenuEl = null;
         }
@@ -1742,44 +1768,44 @@ const ScheduleModule = {
      * @param {HTMLElement} menu
      * @param {MouseEvent} e
      */
-    _positionContextMenu( menu, e ) {
-        document.body.appendChild( menu );
+    _positionContextMenu(menu, e) {
+        document.body.appendChild(menu);
         this._contextMenuEl = menu;
 
         const rect = menu.getBoundingClientRect();
         let x = e.clientX;
         let y = e.clientY;
 
-        if ( x + rect.width > window.innerWidth ) {
-            x = Math.max( 10, window.innerWidth - rect.width - 10 );
+        if (x + rect.width > window.innerWidth) {
+            x = Math.max(10, window.innerWidth - rect.width - 10);
         }
-        if ( y + rect.height > window.innerHeight ) {
-            y = Math.max( 10, window.innerHeight - rect.height - 10 );
+        if (y + rect.height > window.innerHeight) {
+            y = Math.max(10, window.innerHeight - rect.height - 10);
         }
 
         menu.style.left = `${x}px`;
-        menu.style.top  = `${y}px`;
+        menu.style.top = `${y}px`;
 
-        const onDocClick = ( evt ) => {
-            if ( ! menu.contains( evt.target ) ) {
+        const onDocClick = (evt) => {
+            if (!menu.contains(evt.target)) {
                 this._dismissContextMenu();
-                document.removeEventListener( 'click', onDocClick );
-                document.removeEventListener( 'contextmenu', onDocClick );
+                document.removeEventListener('click', onDocClick);
+                document.removeEventListener('contextmenu', onDocClick);
             }
         };
 
-        const onKeyDown = ( evt ) => {
-            if ( evt.key === 'Escape' ) {
+        const onKeyDown = (evt) => {
+            if (evt.key === 'Escape') {
                 this._dismissContextMenu();
-                document.removeEventListener( 'keydown', onKeyDown );
+                document.removeEventListener('keydown', onKeyDown);
             }
         };
 
-        setTimeout( () => {
-            document.addEventListener( 'click', onDocClick );
-            document.addEventListener( 'contextmenu', onDocClick );
-            document.addEventListener( 'keydown', onKeyDown );
-        }, 0 );
+        setTimeout(() => {
+            document.addEventListener('click', onDocClick);
+            document.addEventListener('contextmenu', onDocClick);
+            document.addEventListener('keydown', onKeyDown);
+        }, 0);
     },
 
     /**
@@ -1796,10 +1822,10 @@ const ScheduleModule = {
      * @param {MouseEvent} e
      * @param {number} sessionId
      */
-    _showSessionContextMenu( e, sessionId ) {
+    _showSessionContextMenu(e, sessionId) {
         this._dismissContextMenu();
 
-        const menu = document.createElement( 'div' );
+        const menu = document.createElement('div');
         menu.className = 'ht-context-menu';
 
         const paletteColors = [
@@ -1807,9 +1833,9 @@ const ScheduleModule = {
             '#0097A7', '#D32F2F', '#F57C00', '#455A64', '#10B981'
         ];
 
-        const swatchesHtml = paletteColors.map( c => `
+        const swatchesHtml = paletteColors.map(c => `
             <button type="button" class="ht-color-swatch" data-color="${c}" style="background:${c};" title="Màu ${c}"></button>
-        ` ).join( '' );
+        ` ).join('');
 
         menu.innerHTML = `
             <div class="ht-color-swatches">
@@ -1845,58 +1871,58 @@ const ScheduleModule = {
         `;
 
         // 1. Bind preset color swatches
-        menu.querySelectorAll( '.ht-color-swatch' ).forEach( btn => {
-            btn.addEventListener( 'click', async ( evt ) => {
+        menu.querySelectorAll('.ht-color-swatch').forEach(btn => {
+            btn.addEventListener('click', async (evt) => {
                 evt.stopPropagation();
                 const color = btn.dataset.color || '';
                 this._dismissContextMenu();
-                await this._changeDisplayColor( sessionId, color );
-            } );
-        } );
+                await this._changeDisplayColor(sessionId, color);
+            });
+        });
 
         // 2. Bind "Màu khác..." custom color picker
-        const customColorInput = menu.querySelector( '#ht-ctx-color-custom' );
-        customColorInput?.addEventListener( 'click', ( evt ) => {
+        const customColorInput = menu.querySelector('#ht-ctx-color-custom');
+        customColorInput?.addEventListener('click', (evt) => {
             evt.stopPropagation();
-        } );
-        customColorInput?.addEventListener( 'change', async ( evt ) => {
+        });
+        customColorInput?.addEventListener('change', async (evt) => {
             evt.stopPropagation();
             const chosenColor = customColorInput.value;
-            if ( chosenColor ) {
+            if (chosenColor) {
                 this._dismissContextMenu();
-                await this._changeDisplayColor( sessionId, chosenColor );
+                await this._changeDisplayColor(sessionId, chosenColor);
             }
-        } );
+        });
 
         // 3. Bind "Theo màu lớp" (clear display_color)
-        menu.querySelector( '#ht-ctx-color-class' )?.addEventListener( 'click', async ( evt ) => {
+        menu.querySelector('#ht-ctx-color-class')?.addEventListener('click', async (evt) => {
             evt.stopPropagation();
             this._dismissContextMenu();
-            await this._changeDisplayColor( sessionId, '' );
-        } );
+            await this._changeDisplayColor(sessionId, '');
+        });
 
         // Bind copy
-        menu.querySelector( '#ht-ctx-copy' )?.addEventListener( 'click', async ( evt ) => {
+        menu.querySelector('#ht-ctx-copy')?.addEventListener('click', async (evt) => {
             evt.stopPropagation();
             this._dismissContextMenu();
-            await this._copySession( sessionId );
-        } );
+            await this._copySession(sessionId);
+        });
 
         // Bind duplicate
-        menu.querySelector( '#ht-ctx-duplicate' )?.addEventListener( 'click', async ( evt ) => {
+        menu.querySelector('#ht-ctx-duplicate')?.addEventListener('click', async (evt) => {
             evt.stopPropagation();
             this._dismissContextMenu();
-            await this._duplicateSession( sessionId );
-        } );
+            await this._duplicateSession(sessionId);
+        });
 
         // Bind delete
-        menu.querySelector( '#ht-ctx-delete' )?.addEventListener( 'click', async ( evt ) => {
+        menu.querySelector('#ht-ctx-delete')?.addEventListener('click', async (evt) => {
             evt.stopPropagation();
             this._dismissContextMenu();
-            await this._deleteSessionShortcut( sessionId );
-        } );
+            await this._deleteSessionShortcut(sessionId);
+        });
 
-        this._positionContextMenu( menu, e );
+        this._positionContextMenu(menu, e);
     },
 
     /**
@@ -1906,38 +1932,38 @@ const ScheduleModule = {
      * @param {MouseEvent} e
      * @param {string} date YYYY-MM-DD
      */
-    _showEmptyContextMenu( e, date ) {
+    _showEmptyContextMenu(e, date) {
         this._dismissContextMenu();
 
-        const menu = document.createElement( 'div' );
+        const menu = document.createElement('div');
         menu.className = 'ht-context-menu';
 
-        const hasClipboard = !! this._calendarSessionClipboard;
+        const hasClipboard = !!this._calendarSessionClipboard;
 
         menu.innerHTML = `
             <button type="button" class="ht-context-menu__item" id="ht-ctx-add">
                 <span class="ht-context-menu__icon">＋</span> Thêm buổi học
             </button>
-            <button type="button" class="ht-context-menu__item${! hasClipboard ? ' ht-context-menu__item--disabled' : ''}" id="ht-ctx-paste">
+            <button type="button" class="ht-context-menu__item${!hasClipboard ? ' ht-context-menu__item--disabled' : ''}" id="ht-ctx-paste">
                 <span class="ht-context-menu__icon">📌</span> Dán
             </button>
         `;
 
-        menu.querySelector( '#ht-ctx-add' )?.addEventListener( 'click', ( evt ) => {
+        menu.querySelector('#ht-ctx-add')?.addEventListener('click', (evt) => {
             evt.stopPropagation();
             this._dismissContextMenu();
-            this._openCreateForm( { date: date } );
-        } );
+            this._openCreateForm({ date: date });
+        });
 
-        if ( hasClipboard ) {
-            menu.querySelector( '#ht-ctx-paste' )?.addEventListener( 'click', ( evt ) => {
+        if (hasClipboard) {
+            menu.querySelector('#ht-ctx-paste')?.addEventListener('click', (evt) => {
                 evt.stopPropagation();
                 this._dismissContextMenu();
-                this._pasteSession( date );
-            } );
+                this._pasteSession(date);
+            });
         }
 
-        this._positionContextMenu( menu, e );
+        this._positionContextMenu(menu, e);
     },
 
     /**
@@ -1946,16 +1972,16 @@ const ScheduleModule = {
      * @param {number} sessionId
      * @param {string} color Hex hoặc ''
      */
-    async _changeDisplayColor( sessionId, color ) {
+    async _changeDisplayColor(sessionId, color) {
         try {
-            const result = await HT.api.call( 'hinteach_session_display_color', {
-                session_id:    sessionId,
+            const result = await HT.api.call('hinteach_session_display_color', {
+                session_id: sessionId,
                 display_color: color,
-            } );
-            HT.utils.toast( result.message || 'Đã đổi màu buổi học.' );
+            });
+            HT.utils.toast(result.message || 'Đã đổi màu buổi học.');
             await this._render();
-        } catch ( err ) {
-            HT.utils.toast( err.message || 'Không thể đổi màu buổi học.', 'error' );
+        } catch (err) {
+            HT.utils.toast(err.message || 'Không thể đổi màu buổi học.', 'error');
         }
     },
 
@@ -1964,32 +1990,32 @@ const ScheduleModule = {
      *
      * @param {number} sessionId
      */
-    async _copySession( sessionId ) {
+    async _copySession(sessionId) {
         try {
-            const data = await HT.api.call( 'hinteach_session_get', { session_id: sessionId }, 'GET' );
+            const data = await HT.api.call('hinteach_session_get', { session_id: sessionId }, 'GET');
             const session = data.session;
-            if ( ! session ) {
-                HT.utils.toast( 'Không tìm thấy buổi học để sao chép.', 'error' );
+            if (!session) {
+                HT.utils.toast('Không tìm thấy buổi học để sao chép.', 'error');
                 return;
             }
 
             // Clone dữ liệu, bỏ display_color và thông tin recurrence
             this._calendarSessionClipboard = {
-                class_id:         session.class_id,
-                type:             session.type,
-                price:            session.price,
-                session_name:     session.session_name || '',
-                content:          session.content || '',
+                class_id: session.class_id,
+                type: session.type,
+                price: session.price,
+                session_name: session.session_name || '',
+                content: session.content || '',
                 homework_content: session.homework_content || '',
-                general_comment:  session.general_comment || '',
-                start_time:       session.start_time,
-                end_time:         session.end_time,
-                student_ids:      ( session.students || [] ).map( s => parseInt( s.student_id, 10 ) ),
+                general_comment: session.general_comment || '',
+                start_time: session.start_time,
+                end_time: session.end_time,
+                student_ids: (session.students || []).map(s => parseInt(s.student_id, 10)),
             };
 
-            HT.utils.toast( 'Đã sao chép buổi học vào bộ nhớ tạm.' );
-        } catch ( err ) {
-            HT.utils.toast( 'Lỗi khi sao chép: ' + err.message, 'error' );
+            HT.utils.toast('Đã sao chép buổi học vào bộ nhớ tạm.');
+        } catch (err) {
+            HT.utils.toast('Lỗi khi sao chép: ' + err.message, 'error');
         }
     },
 
@@ -1998,27 +2024,27 @@ const ScheduleModule = {
      *
      * @param {string} targetDate YYYY-MM-DD
      */
-    _pasteSession( targetDate ) {
-        if ( ! this._calendarSessionClipboard ) {
-            HT.utils.toast( 'Bộ nhớ tạm rỗng. Vui lòng sao chép một buổi học trước.', 'error' );
+    _pasteSession(targetDate) {
+        if (!this._calendarSessionClipboard) {
+            HT.utils.toast('Bộ nhớ tạm rỗng. Vui lòng sao chép một buổi học trước.', 'error');
             return;
         }
 
         const clip = this._calendarSessionClipboard;
-        this._openCreateForm( {
-            isPaste:          true,
-            date:             targetDate,
-            start_time:       clip.start_time ? clip.start_time.slice( 0, 5 ) : '',
-            end_time:         clip.end_time ? clip.end_time.slice( 0, 5 ) : '',
-            class_id:         clip.class_id,
-            type:             clip.type,
-            price:            clip.price,
-            session_name:     clip.session_name,
-            content:          clip.content,
+        this._openCreateForm({
+            isPaste: true,
+            date: targetDate,
+            start_time: clip.start_time ? clip.start_time.slice(0, 5) : '',
+            end_time: clip.end_time ? clip.end_time.slice(0, 5) : '',
+            class_id: clip.class_id,
+            type: clip.type,
+            price: clip.price,
+            session_name: clip.session_name,
+            content: clip.content,
             homework_content: clip.homework_content,
-            general_comment:  clip.general_comment,
-            student_ids:      clip.student_ids || [],
-        } );
+            general_comment: clip.general_comment,
+            student_ids: clip.student_ids || [],
+        });
     },
 
     /**
@@ -2027,10 +2053,10 @@ const ScheduleModule = {
      * @param {string} timeStr
      * @returns {number}
      */
-    _timeToMinutes( timeStr ) {
-        if ( ! timeStr ) return 0;
-        const parts = timeStr.slice( 0, 5 ).split( ':' );
-        return parseInt( parts[ 0 ], 10 ) * 60 + parseInt( parts[ 1 ], 10 );
+    _timeToMinutes(timeStr) {
+        if (!timeStr) return 0;
+        const parts = timeStr.slice(0, 5).split(':');
+        return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
     },
 
     /**
@@ -2039,10 +2065,10 @@ const ScheduleModule = {
      * @param {number} mins
      * @returns {string}
      */
-    _minutesToTime( mins ) {
-        const h = Math.floor( mins / 60 );
+    _minutesToTime(mins) {
+        const h = Math.floor(mins / 60);
         const m = mins % 60;
-        return `${String( h ).padStart( 2, '0' )}:${String( m ).padStart( 2, '0' )}`;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     },
 
     /**
@@ -2053,54 +2079,54 @@ const ScheduleModule = {
      * @param {Array}  allSessions  Danh sách sessions hiện có trong tuần
      * @returns {{ start_time: string, end_time: string }|null}
      */
-    _findDuplicateSlot( session, allSessions ) {
-        const sStartM = this._timeToMinutes( session.start_time );
-        const sEndM   = this._timeToMinutes( session.end_time );
-        const durM    = sEndM - sStartM;
+    _findDuplicateSlot(session, allSessions) {
+        const sStartM = this._timeToMinutes(session.start_time);
+        const sEndM = this._timeToMinutes(session.end_time);
+        const durM = sEndM - sStartM;
 
-        if ( durM <= 0 ) return null;
+        if (durM <= 0) return null;
 
-        const daySessions = allSessions.filter( s => s.date === session.date && Number( s.id ) !== Number( session.id ) );
+        const daySessions = allSessions.filter(s => s.date === session.date && Number(s.id) !== Number(session.id));
 
-        const isSlotBusy = ( startM, endM ) => {
-            return daySessions.some( s => {
-                const ss = this._timeToMinutes( s.start_time );
-                const se = this._timeToMinutes( s.end_time );
-                return ( startM < se && endM > ss );
-            } );
+        const isSlotBusy = (startM, endM) => {
+            return daySessions.some(s => {
+                const ss = this._timeToMinutes(s.start_time);
+                const se = this._timeToMinutes(s.end_time);
+                return (startM < se && endM > ss);
+            });
         };
 
-        const EARLIEST = 7 * 60;   // 07:00
-        const LATEST   = 24 * 60;  // 24:00
+        const EARLIEST = this.DAY_START_HOUR * 60;   // 06:00
+        const LATEST = this.DAY_END_HOUR * 60;        // 24:00
 
         // Priority 1: Ngay sau endTime của session gốc
-        if ( sEndM + durM <= LATEST && ! isSlotBusy( sEndM, sEndM + durM ) ) {
+        if (sEndM + durM <= LATEST && !isSlotBusy(sEndM, sEndM + durM)) {
             return {
-                start_time: this._minutesToTime( sEndM ),
-                end_time:   this._minutesToTime( sEndM + durM ),
+                start_time: this._minutesToTime(sEndM),
+                end_time: this._minutesToTime(sEndM + durM),
             };
         }
 
         // Priority 2: Mở rộng tìm kiếm ±30 phút mỗi bước quanh mốc sEndM
-        const maxOffset = Math.max( LATEST - sEndM, sEndM - EARLIEST );
-        for ( let offset = 30; offset <= maxOffset; offset += 30 ) {
+        const maxOffset = Math.max(LATEST - sEndM, sEndM - EARLIEST);
+        for (let offset = 30; offset <= maxOffset; offset += 30) {
             // Thử hướng sau: sEndM + offset
             const afterStart = sEndM + offset;
-            const afterEnd   = afterStart + durM;
-            if ( afterStart >= EARLIEST && afterEnd <= LATEST && ! isSlotBusy( afterStart, afterEnd ) ) {
+            const afterEnd = afterStart + durM;
+            if (afterStart >= EARLIEST && afterEnd <= LATEST && !isSlotBusy(afterStart, afterEnd)) {
                 return {
-                    start_time: this._minutesToTime( afterStart ),
-                    end_time:   this._minutesToTime( afterEnd ),
+                    start_time: this._minutesToTime(afterStart),
+                    end_time: this._minutesToTime(afterEnd),
                 };
             }
 
             // Thử hướng trước: sEndM - offset
             const beforeStart = sEndM - offset;
-            const beforeEnd   = beforeStart + durM;
-            if ( beforeStart >= EARLIEST && beforeEnd <= LATEST && ! isSlotBusy( beforeStart, beforeEnd ) ) {
+            const beforeEnd = beforeStart + durM;
+            if (beforeStart >= EARLIEST && beforeEnd <= LATEST && !isSlotBusy(beforeStart, beforeEnd)) {
                 return {
-                    start_time: this._minutesToTime( beforeStart ),
-                    end_time:   this._minutesToTime( beforeEnd ),
+                    start_time: this._minutesToTime(beforeStart),
+                    end_time: this._minutesToTime(beforeEnd),
                 };
             }
         }
@@ -2113,55 +2139,55 @@ const ScheduleModule = {
      *
      * @param {number} sessionId
      */
-    async _duplicateSession( sessionId ) {
+    async _duplicateSession(sessionId) {
         try {
-            const data = await HT.api.call( 'hinteach_session_get', { session_id: sessionId }, 'GET' );
+            const data = await HT.api.call('hinteach_session_get', { session_id: sessionId }, 'GET');
             const session = data.session;
-            if ( ! session ) {
-                HT.utils.toast( 'Không tìm thấy thông tin buổi học.', 'error' );
+            if (!session) {
+                HT.utils.toast('Không tìm thấy thông tin buổi học.', 'error');
                 return;
             }
 
             // Tìm slot trống trong ngày
-            const slot = this._findDuplicateSlot( session, this._sessions || [] );
-            if ( ! slot ) {
-                HT.utils.toast( 'Không còn khung giờ trống trong ngày để nhân bản buổi học này.', 'error' );
+            const slot = this._findDuplicateSlot(session, this._sessions || []);
+            if (!slot) {
+                HT.utils.toast('Không còn khung giờ trống trong ngày để nhân bản buổi học này.', 'error');
                 return;
             }
 
-            const studentIds = ( session.students || [] ).map( s => parseInt( s.student_id, 10 ) );
+            const studentIds = (session.students || []).map(s => parseInt(s.student_id, 10));
 
             const payload = {
-                class_id:         session.class_id,
-                date:             session.date,
-                start_time:       slot.start_time,
-                end_time:         slot.end_time,
-                type:             session.type,
-                student_ids:      studentIds,
-                price:            session.price || 0,
-                session_name:     session.session_name || '',
-                content:          session.content || '',
+                class_id: session.class_id,
+                date: session.date,
+                start_time: slot.start_time,
+                end_time: slot.end_time,
+                type: session.type,
+                student_ids: studentIds,
+                price: session.price || 0,
+                session_name: session.session_name || '',
+                content: session.content || '',
                 homework_content: session.homework_content || '',
-                general_comment:  session.general_comment || '',
-                display_color:    '', // Buổi nhân bản độc lập, không kế thừa màu
+                general_comment: session.general_comment || '',
+                display_color: '', // Buổi nhân bản độc lập, không kế thừa màu
             };
 
-            await HT.api.call( 'hinteach_session_save', payload );
-            HT.utils.toast( 'Đã nhân bản buổi học thành công.' );
+            await HT.api.call('hinteach_session_save', payload);
+            HT.utils.toast('Đã nhân bản buổi học thành công.');
             await this._render();
-        } catch ( err ) {
-            if ( err.status === 409 && err.serverData?.conflict ) {
+        } catch (err) {
+            if (err.status === 409 && err.serverData?.conflict) {
                 const c = err.serverData.conflict;
                 const conflictName = c.session_name
-                    ? `"${HT.utils.escapeHtml( c.session_name )}"`
+                    ? `"${HT.utils.escapeHtml(c.session_name)}"`
                     : 'buổi học';
-                const conflictTime = `${this._fmtTime( c.start_time )} – ${this._fmtTime( c.end_time )}`;
+                const conflictTime = `${this._fmtTime(c.start_time)} – ${this._fmtTime(c.end_time)}`;
                 HT.utils.toast(
-                    `Trùng lịch với ${conflictName} lúc ${conflictTime} ngày ${this._fmtShort( c.date )}.`,
+                    `Trùng lịch với ${conflictName} lúc ${conflictTime} ngày ${this._fmtShort(c.date)}.`,
                     'error'
                 );
             } else {
-                HT.utils.toast( err.message || 'Không thể nhân bản buổi học.', 'error' );
+                HT.utils.toast(err.message || 'Không thể nhân bản buổi học.', 'error');
             }
         }
     },
@@ -2171,16 +2197,16 @@ const ScheduleModule = {
      *
      * @param {number} sessionId
      */
-    async _deleteSessionShortcut( sessionId ) {
+    async _deleteSessionShortcut(sessionId) {
         try {
-            const data = await HT.api.call( 'hinteach_session_get', { session_id: sessionId }, 'GET' );
-            if ( ! data.session ) {
-                HT.utils.toast( 'Không tìm thấy thông tin buổi học.', 'error' );
+            const data = await HT.api.call('hinteach_session_get', { session_id: sessionId }, 'GET');
+            if (!data.session) {
+                HT.utils.toast('Không tìm thấy thông tin buổi học.', 'error');
                 return;
             }
-            await this._deleteSession( data.session );
-        } catch ( err ) {
-            HT.utils.toast( err.message || 'Lỗi khi chuẩn bị xoá buổi học.', 'error' );
+            await this._deleteSession(data.session);
+        } catch (err) {
+            HT.utils.toast(err.message || 'Lỗi khi chuẩn bị xoá buổi học.', 'error');
         }
     },
 
@@ -2193,8 +2219,8 @@ const ScheduleModule = {
      * @param {number} px
      * @returns {number}
      */
-    _pxToMinutes( px ) {
-        return ( px / this.HOUR_HEIGHT ) * 60 + this.DAY_START_HOUR * 60;
+    _pxToMinutes(px) {
+        return (px / this.HOUR_HEIGHT) * 60 + this.DAY_START_HOUR * 60;
     },
 
     /**
@@ -2202,8 +2228,8 @@ const ScheduleModule = {
      * @param {number} mins
      * @returns {number}
      */
-    _snapMinutes( mins ) {
-        return Math.round( mins / this.SNAP_MINUTES ) * this.SNAP_MINUTES;
+    _snapMinutes(mins) {
+        return Math.round(mins / this.SNAP_MINUTES) * this.SNAP_MINUTES;
     },
 
     /**
@@ -2211,32 +2237,8 @@ const ScheduleModule = {
      * @param {number} mins  phút từ 00:00
      * @returns {number}
      */
-    _minutesToPx( mins ) {
-        return ( mins - this.DAY_START_HOUR * 60 ) / 60 * this.HOUR_HEIGHT;
-    },
-
-    /**
-     * Chuyển chuỗi 'HH:MM' hoặc 'HH:MM:SS' thành số phút từ 00:00.
-     * Dùng bởi _renderSessionBlock() để tính top/height cho session block.
-     * @param {string} timeStr
-     * @returns {number}
-     */
-    _timeToMinutes( timeStr ) {
-        if ( ! timeStr ) return 0;
-        const parts = timeStr.split( ':' );
-        return parseInt( parts[ 0 ], 10 ) * 60 + ( parseInt( parts[ 1 ], 10 ) || 0 );
-    },
-
-    /**
-     * Chuyển số phút từ 00:00 thành chuỗi 'HH:MM'.
-     * Dùng bởi drag-create preview và drag-move ghost label.
-     * @param {number} mins
-     * @returns {string}
-     */
-    _minutesToTime( mins ) {
-        const h = Math.floor( mins / 60 );
-        const m = mins % 60;
-        return `${String( h ).padStart( 2, '0' )}:${String( m ).padStart( 2, '0' )}`;
+    _minutesToPx(mins) {
+        return (mins - this.DAY_START_HOUR * 60) / 60 * this.HOUR_HEIGHT;
     },
 
     // ──────────────────────────────────────────────────────────
@@ -2250,61 +2252,78 @@ const ScheduleModule = {
      * @param {HTMLElement}  dayBody  .ht-cal__day-body element
      * @param {string}       date     YYYY-MM-DD
      */
-    _onCreatePointerDown( e, dayBody, date ) {
+    _onCreatePointerDown(e, dayBody, date) {
         e.preventDefault();
 
-        const rect      = dayBody.getBoundingClientRect();
-        const startY    = e.clientY - rect.top;
-        const startMins = this._snapMinutes( this._pxToMinutes( startY ) );
+        const rect = dayBody.getBoundingClientRect();
+        const startY = e.clientY - rect.top;
+        const startMins = this._snapMinutes(this._pxToMinutes(startY));
 
-        let preview    = null;
+        let preview = null;
         let isDragging = false;
-        let endMins    = startMins + this.SNAP_MINUTES;
+        let endMins = startMins + this.SNAP_MINUTES;
+        let lastClientY = e.clientY;
+        let rafId = null;
 
-        const onMove = ( ev ) => {
-            const curY    = ev.clientY - rect.top;
-            const curMins = this._snapMinutes( this._pxToMinutes( curY ) );
-            const rawDiff = Math.abs( ev.clientY - e.clientY );
+        document.body.style.userSelect = 'none';
 
-            if ( ! isDragging && rawDiff < this.DRAG_THRESHOLD ) return;
-            isDragging = true;
+        const updatePreview = () => {
+            const curY = lastClientY - rect.top;
+            const curMins = this._snapMinutes(this._pxToMinutes(curY));
 
             endMins = curMins > startMins ? curMins : startMins + this.SNAP_MINUTES;
 
-            if ( ! preview ) {
-                preview = document.createElement( 'div' );
+            if (!preview) {
+                preview = document.createElement('div');
                 preview.className = 'ht-drag-preview';
-                dayBody.appendChild( preview );
+                dayBody.appendChild(preview);
             }
-            const topPx    = this._minutesToPx( startMins );
-            const heightPx = this._minutesToPx( endMins ) - topPx;
-            preview.style.top    = `${topPx}px`;
-            preview.style.height = `${Math.max( 8, heightPx )}px`;
-            preview.innerHTML    = `<span class="ht-drag-preview__label">${this._minutesToTime( startMins )} \u2013 ${this._minutesToTime( endMins )}</span>`;
+            const topPx = this._minutesToPx(startMins);
+            const heightPx = this._minutesToPx(endMins) - topPx;
+            preview.style.top = `${topPx}px`;
+            preview.style.height = `${Math.max(8, heightPx)}px`;
+            preview.innerHTML = `<span class="ht-drag-preview__label">${this._minutesToTime(startMins)} \u2013 ${this._minutesToTime(endMins)}</span>`;
+        };
+
+        const onMove = (ev) => {
+            lastClientY = ev.clientY;
+            const rawDiff = Math.abs(ev.clientY - e.clientY);
+
+            if (!isDragging && rawDiff < this.DRAG_THRESHOLD) return;
+            isDragging = true;
+
+            if (!rafId) {
+                rafId = requestAnimationFrame(() => {
+                    rafId = null;
+                    updatePreview();
+                });
+            }
         };
 
         const onUp = () => {
-            document.removeEventListener( 'pointermove', onMove );
-            document.removeEventListener( 'pointerup', onUp );
+            document.removeEventListener('pointermove', onMove);
+            document.removeEventListener('pointerup', onUp);
+            document.body.style.userSelect = '';
+            if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
 
-            if ( preview ) { preview.remove(); preview = null; }
-            if ( ! isDragging ) return;
+            if (preview) { preview.remove(); preview = null; }
+            if (!isDragging) return;
 
             // Clamp và đảm bảo tối thiểu SNAP_MINUTES
             const dayEndMins = this.DAY_END_HOUR * 60;
-            if ( endMins - startMins < this.SNAP_MINUTES ) endMins = startMins + this.SNAP_MINUTES;
-            if ( endMins > dayEndMins ) endMins = dayEndMins;
-            if ( startMins >= dayEndMins ) return;
+            if (endMins - startMins < this.SNAP_MINUTES) endMins = startMins + this.SNAP_MINUTES;
+            if (endMins > dayEndMins) endMins = dayEndMins;
+            if (startMins >= dayEndMins) return;
 
-            this._openCreateForm( {
-                date:       date,
-                start_time: this._minutesToTime( startMins ),
-                end_time:   this._minutesToTime( endMins ),
-            } );
+            this._openCreateForm({
+                date: date,
+                start_time: this._minutesToTime(startMins),
+                end_time: this._minutesToTime(endMins),
+            });
         };
 
-        document.addEventListener( 'pointermove', onMove );
-        document.addEventListener( 'pointerup', onUp );
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
     },
 
     // ──────────────────────────────────────────────────────────
@@ -2318,108 +2337,165 @@ const ScheduleModule = {
      * @param {HTMLElement}  el         .ht-session-block element
      * @param {number}       sessionId
      */
-    _onSessionPointerDown( e, el, sessionId ) {
-        if ( e.target.closest( '.ht-context-menu' ) ) return;
+    _onSessionPointerDown(e, el, sessionId) {
+        if (e.target.closest('.ht-context-menu')) return;
 
-        const origSession = this._sessions.find( s => Number( s.id ) === sessionId );
-        if ( ! origSession ) return;
+        const origSession = this._sessions.find(s => Number(s.id) === sessionId);
+        if (!origSession) return;
 
-        const origDate  = origSession.date;
-        const origStart = origSession.start_time ? origSession.start_time.slice( 0, 5 ) : '';
-        const origEnd   = origSession.end_time   ? origSession.end_time.slice( 0, 5 )   : '';
+        const origDate = origSession.date;
+        const origStart = origSession.start_time ? origSession.start_time.slice(0, 5) : '';
+        const origEnd = origSession.end_time ? origSession.end_time.slice(0, 5) : '';
 
         const startX = e.clientX;
         const startY = e.clientY;
+        let grabOffsetX = 0;
+        let grabOffsetY = 0;
         let isDragging = false;
-        let ghost      = null;
+        let ghost = null;
 
-        let newDate  = origDate;
+        let newDate = origDate;
         let newStart = origStart;
-        let newEnd   = origEnd;
+        let newEnd = origEnd;
 
-        const onMove = ( ev ) => {
-            const dx = ev.clientX - startX;
-            const dy = ev.clientY - startY;
+        let lastClientX = e.clientX;
+        let lastClientY = e.clientY;
+        let rafId = null;
 
-            if ( ! isDragging && ( Math.abs( dx ) < this.DRAG_THRESHOLD && Math.abs( dy ) < this.DRAG_THRESHOLD ) ) return;
+        document.body.style.userSelect = 'none';
 
-            if ( ! isDragging ) {
-                isDragging = true;
-                el.classList.add( 'ht-session-block--dragging' );
-
-                ghost = document.createElement( 'div' );
-                ghost.className = 'ht-drag-ghost';
-                ghost.textContent = origSession.class_name || 'Buổi học';
-                document.body.appendChild( ghost );
+        const updateGhostAndTarget = () => {
+            if (ghost) {
+                ghost.style.transform = `translate3d(${lastClientX - grabOffsetX}px, ${lastClientY - grabOffsetY}px, 0)`;
+                const timeEl = ghost.querySelector('.ht-session-block__time');
+                if (timeEl && newStart && newEnd) {
+                    timeEl.textContent = `${newStart} \u2013 ${newEnd}`;
+                }
             }
 
-            if ( ghost ) {
-                ghost.style.left = `${ev.clientX}px`;
-                ghost.style.top  = `${ev.clientY}px`;
-            }
-
-            // Xác định day-body phía dưới con trỏ (tạm ẩn ghost)
-            if ( ghost ) ghost.style.display = 'none';
-            const targetEl = document.elementFromPoint( ev.clientX, ev.clientY );
-            if ( ghost ) ghost.style.display = '';
-
-            if ( ! targetEl ) return;
-            const dayBody = targetEl.closest( '.ht-cal__day-body[data-date]' );
-            if ( ! dayBody ) return;
+            // Xác định day-body phía dưới con trỏ (ghost có pointer-events: none nên elementFromPoint xuyên qua được)
+            const targetEl = document.elementFromPoint(lastClientX, lastClientY);
+            if (!targetEl) return;
+            const dayBody = targetEl.closest('.ht-cal__day-body[data-date]');
+            if (!dayBody) return;
 
             newDate = dayBody.dataset.date;
 
-            const rect     = dayBody.getBoundingClientRect();
-            const relY     = ev.clientY - rect.top;
-            const snapMins = this._snapMinutes( this._pxToMinutes( relY ) );
+            const rect = dayBody.getBoundingClientRect();
+            const relY = lastClientY - rect.top;
+            const snapMins = this._snapMinutes(this._pxToMinutes(relY));
 
             // Giữ nguyên duration
-            const origStartM = this._timeToMinutes( origStart );
-            const origEndM   = this._timeToMinutes( origEnd );
-            const durM       = Math.max( this.SNAP_MINUTES, origEndM - origStartM );
+            const origStartM = this._timeToMinutes(origStart);
+            const origEndM = this._timeToMinutes(origEnd);
+            const durM = Math.max(this.SNAP_MINUTES, origEndM - origStartM);
 
             let newStartM = snapMins;
-            let newEndM   = newStartM + durM;
+            let newEndM = newStartM + durM;
 
             // Clamp
-            const dayEndM   = this.DAY_END_HOUR * 60;
+            const dayEndM = this.DAY_END_HOUR * 60;
             const dayStartM = this.DAY_START_HOUR * 60;
-            if ( newEndM > dayEndM ) {
-                newEndM   = dayEndM;
+            if (newEndM > dayEndM) {
+                newEndM = dayEndM;
                 newStartM = newEndM - durM;
             }
-            if ( newStartM < dayStartM ) {
+            if (newStartM < dayStartM) {
                 newStartM = dayStartM;
-                newEndM   = newStartM + durM;
+                newEndM = newStartM + durM;
             }
 
-            newStart = this._minutesToTime( newStartM );
-            newEnd   = this._minutesToTime( newEndM );
+            newStart = this._minutesToTime(newStartM);
+            newEnd = this._minutesToTime(newEndM);
+        };
 
-            if ( ghost ) ghost.textContent = `${origSession.class_name || 'Buổi học'} ${newStart}\u2013${newEnd}`;
+        const onMove = (ev) => {
+            lastClientX = ev.clientX;
+            lastClientY = ev.clientY;
+            const dx = ev.clientX - startX;
+            const dy = ev.clientY - startY;
+
+            if (!isDragging && (Math.abs(dx) < this.DRAG_THRESHOLD && Math.abs(dy) < this.DRAG_THRESHOLD)) return;
+
+            if (!isDragging) {
+                isDragging = true;
+
+                const elRect = el.getBoundingClientRect();
+                const elComputed = window.getComputedStyle(el);
+                const computedBg = elComputed.backgroundColor;
+                const computedColor = elComputed.color;
+                const computedBorderLeft = elComputed.borderLeft;
+                const computedBorderTop = elComputed.borderTop;
+                const computedBorderRight = elComputed.borderRight;
+                const computedBorderBottom = elComputed.borderBottom;
+                const computedBorderRadius = elComputed.borderRadius;
+
+                grabOffsetX = startX - elRect.left;
+                grabOffsetY = startY - elRect.top;
+
+                el.classList.add('ht-session-block--dragging');
+
+                // Clone nguyên bản session block để giữ trọn vẹn kích thước, nội dung và cấu trúc
+                ghost = el.cloneNode(true);
+                ghost.classList.remove('ht-session-block--dragging');
+                ghost.classList.add('ht-session-block--ghost');
+
+                // Áp dụng computed visual styles từ block gốc để bảo toàn màu sắc
+                ghost.style.backgroundColor = computedBg;
+                ghost.style.color = computedColor;
+                ghost.style.borderLeft = computedBorderLeft;
+                ghost.style.borderTop = computedBorderTop;
+                ghost.style.borderRight = computedBorderRight;
+                ghost.style.borderBottom = computedBorderBottom;
+                ghost.style.borderRadius = computedBorderRadius;
+
+                // Layout cố định cho ghost
+                ghost.style.position = 'fixed';
+                ghost.style.top = '0px';
+                ghost.style.left = '0px';
+                ghost.style.right = 'auto';
+                ghost.style.bottom = 'auto';
+                ghost.style.width = `${elRect.width}px`;
+                ghost.style.height = `${elRect.height}px`;
+                ghost.style.margin = '0';
+                ghost.style.zIndex = '99999';
+                ghost.style.pointerEvents = 'none';
+                ghost.style.boxSizing = 'border-box';
+                ghost.style.transform = `translate3d(${lastClientX - grabOffsetX}px, ${lastClientY - grabOffsetY}px, 0)`;
+                document.body.appendChild(ghost);
+            }
+
+            if (!rafId) {
+                rafId = requestAnimationFrame(() => {
+                    rafId = null;
+                    updateGhostAndTarget();
+                });
+            }
         };
 
         const onUp = async () => {
-            document.removeEventListener( 'pointermove', onMove );
-            document.removeEventListener( 'pointerup', onUp );
+            document.removeEventListener('pointermove', onMove);
+            document.removeEventListener('pointerup', onUp);
+            document.body.style.userSelect = '';
+            if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
 
-            el.classList.remove( 'ht-session-block--dragging' );
-            if ( ghost ) { ghost.remove(); ghost = null; }
+            el.classList.remove('ht-session-block--dragging');
+            if (ghost) { ghost.remove(); ghost = null; }
 
-            if ( ! isDragging ) return;
+            if (!isDragging) return;
 
             // Click-suppression: ngăn click event bắn theo sau pointerup
             this._dragClickSuppressed = true;
-            setTimeout( () => { this._dragClickSuppressed = false; }, 300 );
+            setTimeout(() => { this._dragClickSuppressed = false; }, 300);
 
             // No-op nếu không đổi vị trí
-            if ( newDate === origDate && newStart === origStart && newEnd === origEnd ) return;
+            if (newDate === origDate && newStart === origStart && newEnd === origEnd) return;
 
-            await this._executeDragMove( sessionId, newDate, newStart, newEnd );
+            await this._executeDragMove(sessionId, newDate, newStart, newEnd);
         };
 
-        document.addEventListener( 'pointermove', onMove );
-        document.addEventListener( 'pointerup', onUp );
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
     },
 
     /**
@@ -2431,72 +2507,72 @@ const ScheduleModule = {
      * @param {string} newStart   HH:MM
      * @param {string} newEnd     HH:MM
      */
-    async _executeDragMove( sessionId, newDate, newStart, newEnd ) {
+    async _executeDragMove(sessionId, newDate, newStart, newEnd) {
         let session;
         try {
-            const data = await HT.api.call( 'hinteach_session_get', { session_id: sessionId }, 'GET' );
+            const data = await HT.api.call('hinteach_session_get', { session_id: sessionId }, 'GET');
             session = data.session;
-            if ( ! session ) {
-                HT.utils.toast( 'Không tìm thấy thông tin buổi học.', 'error' );
+            if (!session) {
+                HT.utils.toast('Không tìm thấy thông tin buổi học.', 'error');
                 await this._render();
                 return;
             }
-        } catch ( err ) {
-            HT.utils.toast( 'Lỗi tải thông tin buổi học: ' + err.message, 'error' );
+        } catch (err) {
+            HT.utils.toast('Lỗi tải thông tin buổi học: ' + err.message, 'error');
             await this._render();
             return;
         }
 
         // M7-2: hỏi scope nếu thuộc chuỗi lặp và có following
         let updateScope = 'single';
-        if ( session.repeat_group_id && session.following_count > 0 ) {
-            updateScope = await this._askScope( 'di chuyển', session.following_count );
-            if ( ! updateScope ) {
+        if (session.repeat_group_id && session.following_count > 0) {
+            updateScope = await this._askScope('di chuyển', session.following_count);
+            if (!updateScope) {
                 // User cancel → abort, render lại về chỗ cũ
                 await this._render();
                 return;
             }
         }
 
-        const studentIds = ( session.students || [] ).map( s => parseInt( s.student_id, 10 ) );
+        const studentIds = (session.students || []).map(s => parseInt(s.student_id, 10));
         const payload = {
-            session_id:       session.id,
-            update_scope:     updateScope,
-            class_id:         session.class_id,
-            date:             newDate,
-            start_time:       newStart,
-            end_time:         newEnd,
-            type:             session.type,
-            student_ids:      studentIds,
-            price:            session.price || 0,
-            session_name:     session.session_name || '',
-            content:          session.content || '',
+            session_id: session.id,
+            update_scope: updateScope,
+            class_id: session.class_id,
+            date: newDate,
+            start_time: newStart,
+            end_time: newEnd,
+            type: session.type,
+            student_ids: studentIds,
+            price: session.price || 0,
+            session_name: session.session_name || '',
+            content: session.content || '',
             homework_content: session.homework_content || '',
-            general_comment:  session.general_comment || '',
-            display_color:    session.display_color || '',
+            general_comment: session.general_comment || '',
+            display_color: session.display_color || '',
         };
 
         try {
-            const result = await HT.api.call( 'hinteach_session_save', payload );
-            if ( updateScope === 'following' && result.updated_count ) {
-                HT.utils.toast( `Đã di chuyển ${result.updated_count} buổi trong chuỗi lặp.` );
+            const result = await HT.api.call('hinteach_session_save', payload);
+            if (updateScope === 'following' && result.updated_count) {
+                HT.utils.toast(`Đã di chuyển ${result.updated_count} buổi trong chuỗi lặp.`);
             } else {
-                HT.utils.toast( 'Đã di chuyển buổi học thành công.' );
+                HT.utils.toast('Đã di chuyển buổi học thành công.');
             }
-        } catch ( err ) {
+        } catch (err) {
             // M7-3: server 409 là source of truth
-            if ( err.status === 409 && err.serverData?.conflict ) {
+            if (err.status === 409 && err.serverData?.conflict) {
                 const c = err.serverData.conflict;
                 const conflictName = c.session_name
-                    ? `"${HT.utils.escapeHtml( c.session_name )}"`
+                    ? `"${HT.utils.escapeHtml(c.session_name)}"`
                     : 'buổi học';
-                const conflictTime = `${this._fmtTime( c.start_time )} \u2013 ${this._fmtTime( c.end_time )}`;
+                const conflictTime = `${this._fmtTime(c.start_time)} \u2013 ${this._fmtTime(c.end_time)}`;
                 HT.utils.toast(
-                    `Trùng lịch với ${conflictName} lúc ${conflictTime} ngày ${this._fmtShort( c.date )}.`,
+                    `Trùng lịch với ${conflictName} lúc ${conflictTime} ngày ${this._fmtShort(c.date)}.`,
                     'error'
                 );
             } else {
-                HT.utils.toast( err.message || 'Không thể di chuyển buổi học.', 'error' );
+                HT.utils.toast(err.message || 'Không thể di chuyển buổi học.', 'error');
             }
         }
 

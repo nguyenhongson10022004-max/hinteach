@@ -62,7 +62,7 @@ Chưa test:
 
 ## GĐ3 — Schedule
 
-**Status: 🟢 M6 COMPLETED**
+**Status: 🟢 M7 COMPLETED**
 
 Đã hoàn thành:
 
@@ -72,6 +72,7 @@ Chưa test:
 - M4 — Edit/Delete Recurrence ✅
 - M5 — Quick Entry / Session Record / Score ✅
 - M6 — Calendar Actions ✅
+- M7 — Calendar Interaction ✅
 
 ---
 
@@ -333,6 +334,86 @@ Tag:
 
 ---
 
+### M7 — Calendar Interaction
+
+**Status: ✅ COMPLETED** (commit `<commit>`, tag `gd3-m7-completed`, 2026-08-31)
+
+Phạm vi hoàn thành:
+
+- Time-grid calendar interaction
+- Drag Create Session
+- Drag Move Session
+- Session ghost interaction
+- 30-minute snap
+- Recurrence scope handling
+- Conflict handling
+- UI rollback
+- Calendar interaction regression testing
+
+Đã triển khai:
+
+Frontend:
+
+- `assets/modules/schedule.js`
+
+  - Time-grid rendering 06:00–24:00
+  - Session block absolute positioning
+  - Drag Create từ vùng trống
+  - Drag Move session
+  - Ghost block interaction
+  - Pointer interaction optimization
+  - Session color rendering theo:
+    - display_color
+    - class_color
+    - default fallback
+
+- `assets/style.css`
+
+  - Time-grid layout
+  - Session block styling
+  - Drag ghost styling
+  - Interaction UX refinement
+
+Backend:
+
+- Không thay đổi schema.
+- Không tạo endpoint mới.
+- Reuse:
+  - `hinteach_session_save`
+  - `hinteach_session_get`
+
+Verification:
+
+- ✅ Time-grid render
+- ✅ Session position
+- ✅ Click edit regression
+- ✅ Context menu regression
+- ✅ Drag Create
+- ✅ Drag Move
+- ✅ Recurrence single/following
+- ✅ Conflict 409 rollback
+- ✅ Refresh persistence
+- ✅ Duplicate/Copy/Paste regression
+
+Out of scope chuyển sang GĐ3 M8:
+
+- Week/Month view switch
+- Calendar summary dashboard
+- Daily revenue summary
+- Convert single session → recurrence
+- Advanced recurrence date-shift behavior
+- Resize session
+
+Commit:
+
+- `<commit>` — feat(schedule): complete gd3 m7 calendar interaction
+
+Tag:
+
+- `gd3-m7-completed`
+
+---
+
 ### GĐ3 — Commits
 
 - `792e117` — feat: add read-only schedule calendar M1
@@ -356,6 +437,8 @@ Tag:
 - `16cd068` — docs: record gd3 m5 quick entry completion
 
 - `80dc690` — feat: complete gd3 m6 calendar actions
+
+- `<commit>` — feat: complete gd3 m7 calendar interaction
 ---
 
 ### GĐ3 — Completed
@@ -372,13 +455,19 @@ Tag:
 
 - M6 — Calendar Actions ✅
 
+- M7 — Calendar Interaction ✅
+
 ---
 
 ### GĐ3 — Còn lại
 
 Chưa triển khai:
 
-- M7 — Calendar Interaction
+- Không còn milestone Schedule nào trong GĐ3.
+
+Planned next:
+
+- GĐ3 M8 — Calendar Enhancement
 
 ---
 
@@ -450,6 +539,13 @@ Không có bug tồn đọng đã xác định tại thời điểm này.
 
 ## Latest Important Changes
 
+- 2026-08-31: Hoàn thành GĐ3 M7 — Calendar Interaction. Commit `<commit>`, tag `gd3-m7-completed`.
+  - Drag Create
+  - Drag Move
+  - Time-grid
+  - Drag UX refinement
+  - Manual verification completed.
+
 - 2026-08-31: Hoàn thành GĐ3 M6 — Calendar Actions. Commit `80dc690`, tag `gd3-m6-completed`.
 
 - 2026-08-31: Hoàn thành GĐ3 M5 — Quick Entry / Session Record / Score. Commit `40ce7cd`.
@@ -468,11 +564,14 @@ Không có bug tồn đọng đã xác định tại thời điểm này.
 
 ## Next Recommended Task
 
-1. Chuẩn bị GĐ3 M7:
-   - Review HAR 3.17–3.18
-   - Phân tích Drag Create / Drag Move
-   - Xác định scope và boundary trước implementation plan
+1. Chuẩn bị GĐ3 M8 — Calendar Enhancement
 
-2. Không triển khai:
-   - Resize (chưa đủ evidence HAR)
-   - Các interaction ngoài M7 scope
+Scope dự kiến:
+
+- Week/Month view switch
+- Calendar summary dashboard
+- Daily revenue summary
+- Convert single session → recurrence
+- Advanced recurrence date-shift behavior
+
+2. Không triển khai Resize nếu chưa có evidence HAR.

@@ -859,6 +859,11 @@ body.ht-modal-open {
    M4/M7: Schedule Calendar + Time-Grid + Drag Interaction
    ══════════════════════════════════════════════════════════ */
 
+#ht-schedule-calendar {
+    width: 100%;
+    overflow-x: auto;
+}
+
 .ht-cal__nav {
     display: flex;
     align-items: center;
@@ -874,12 +879,14 @@ body.ht-modal-open {
 /* Grid: cột giờ bên trái + 7 ngày */
 .ht-cal__grid {
     display: grid;
-    grid-template-columns: 40px repeat(7, 1fr);
+    grid-template-columns: 48px repeat(7, minmax(120px, 1fr));
     gap: 0;
     background: var(--ht-border);
     border: 1px solid var(--ht-border);
     border-radius: var(--ht-radius);
     overflow: hidden;
+    min-width: 888px;
+    box-shadow: var(--ht-shadow);
 }
 
 /* Cột trục giờ bên trái */
@@ -888,29 +895,34 @@ body.ht-modal-open {
     border-right: 1px solid var(--ht-border);
     display: flex;
     flex-direction: column;
+    user-select: none;
 }
 
 .ht-cal__time-gutter-header {
     height: 48px;
     border-bottom: 1px solid var(--ht-border);
+    background: #f8fafc;
     flex-shrink: 0;
 }
 
 .ht-cal__time-gutter-body {
-    flex: 1;
     position: relative;
+    height: 864px;
+    box-sizing: border-box;
 }
 
 .ht-cal__hour-label {
     position: absolute;
-    right: 4px;
-    font-size: 10px;
+    right: 6px;
+    font-size: 11px;
+    font-weight: 500;
     color: var(--ht-text-muted);
     line-height: 1;
     transform: translateY(-50%);
     white-space: nowrap;
     pointer-events: none;
     user-select: none;
+    font-variant-numeric: tabular-nums;
 }
 
 /* Cột ngày */
@@ -926,7 +938,7 @@ body.ht-modal-open {
 }
 
 .ht-cal__day-header {
-    padding: 8px;
+    padding: 6px 8px;
     text-align: center;
     border-bottom: 1px solid var(--ht-border);
     background: #f8fafc;
@@ -937,6 +949,7 @@ body.ht-modal-open {
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 2px;
 }
 
 .ht-cal__col--today .ht-cal__day-header {
@@ -946,22 +959,27 @@ body.ht-modal-open {
 
 .ht-cal__day-name {
     display: block;
-    font-size: 12px;
+    font-size: 11px;
+    font-weight: 600;
     color: var(--ht-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .ht-cal__day-date {
     display: block;
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 700;
+    color: var(--ht-text);
 }
 
 /* Body ngày — container định vị tuyệt đối cho session block */
 .ht-cal__day-body {
     position: relative;
-    flex: 1;
+    height: 864px;
     overflow: hidden;
     cursor: crosshair;
+    box-sizing: border-box;
 }
 
 /* Hour row lines (background) */
@@ -969,8 +987,10 @@ body.ht-modal-open {
     position: absolute;
     left: 0;
     right: 0;
+    height: 48px;
     border-top: 1px solid #f1f5f9;
     pointer-events: none;
+    box-sizing: border-box;
 }
 
 .ht-cal__hour-row--full {
@@ -980,42 +1000,48 @@ body.ht-modal-open {
 /* Session block — positioned absolute trong day-body */
 .ht-session-block {
     position: absolute;
-    left: 2px;
-    right: 2px;
-    background: #fff;
-    border-radius: var(--ht-radius-sm);
-    padding: 4px 6px;
-    box-shadow: var(--ht-shadow);
+    left: 3px;
+    right: 3px;
+    background: #f8fafc;
+    border-radius: 4px;
+    padding: 3px 6px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
     cursor: grab;
     overflow: hidden;
-    transition: box-shadow var(--ht-transition), opacity var(--ht-transition);
+    transition: box-shadow 0.15s ease, opacity 0.15s ease, filter 0.15s ease;
     box-sizing: border-box;
     min-height: 20px;
     user-select: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
 }
 
 .ht-session-block:hover {
-    box-shadow: var(--ht-shadow-md);
-    z-index: 2;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14), 0 2px 4px rgba(0, 0, 0, 0.06);
+    filter: brightness(0.96);
+    z-index: 10;
 }
 
 .ht-session-block--dragging {
-    opacity: 0.35;
-    cursor: grabbing;
+    opacity: 0.3 !important;
+    cursor: grabbing !important;
 }
 
 .ht-session-block__name {
     font-weight: 600;
-    font-size: 11px;
-    color: var(--ht-text);
+    font-size: 11.5px;
+    line-height: 1.3;
+    color: #0f172a;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .ht-session-block__title {
-    font-size: 10px;
-    color: var(--ht-text-muted);
+    font-size: 10.5px;
+    line-height: 1.25;
+    color: #334155;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1023,36 +1049,43 @@ body.ht-modal-open {
 
 .ht-session-block__time {
     font-size: 10px;
-    color: var(--ht-text-muted);
+    line-height: 1.2;
+    font-weight: 600;
+    color: #475569;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     margin-top: 1px;
+    font-variant-numeric: tabular-nums;
 }
 
-/* Ghost element kéo theo chuột khi Drag Move */
+/* Ghost element kéo theo chuột khi Drag Move — full-size session block clone */
+.ht-session-block--ghost,
 .ht-drag-ghost {
-    position: fixed;
-    pointer-events: none;
-    z-index: 9999;
-    opacity: 0.85;
-    border-radius: var(--ht-radius-sm);
-    padding: 4px 8px;
-    background: var(--ht-primary, #2563eb);
-    color: #fff;
-    font-size: 11px;
-    font-weight: 600;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-    min-width: 80px;
-    white-space: nowrap;
-    transform: translate(-50%, -50%);
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: auto !important;
+    bottom: auto !important;
+    margin: 0 !important;
+    pointer-events: none !important;
+    z-index: 99999 !important;
+    opacity: 0.94 !important;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.25), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+    will-change: transform;
+    user-select: none !important;
+    cursor: grabbing !important;
+    box-sizing: border-box !important;
 }
 
 /* Preview vùng kéo khi Drag Create */
 .ht-drag-preview {
     position: absolute;
-    left: 2px;
-    right: 2px;
-    background: rgba(37, 99, 235, 0.15);
-    border: 1.5px dashed var(--ht-primary, #2563eb);
-    border-radius: var(--ht-radius-sm);
+    left: 3px;
+    right: 3px;
+    background: rgba(74, 144, 217, 0.18);
+    border: 1.5px dashed var(--ht-primary, #4A90D9);
+    border-radius: 4px;
     pointer-events: none;
     z-index: 5;
     box-sizing: border-box;
@@ -1060,12 +1093,14 @@ body.ht-modal-open {
 
 .ht-drag-preview__label {
     position: absolute;
-    bottom: 2px;
-    left: 4px;
+    bottom: 3px;
+    left: 5px;
     font-size: 10px;
-    color: var(--ht-primary, #2563eb);
+    color: var(--ht-primary, #4A90D9);
     font-weight: 600;
     pointer-events: none;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
 }
 
 .ht-scope-choices {
