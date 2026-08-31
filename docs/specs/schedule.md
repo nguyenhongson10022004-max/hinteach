@@ -1,6 +1,6 @@
 # Specification — Thời khoá biểu / Buổi học
 
-> Module: Schedule | Status: **IN PROGRESS** (GĐ3 — M1–M5 ✅ completed, M6–M7 ⏳ chưa bắt đầu)
+> Module: Schedule | Status: **IN PROGRESS** (GĐ3 — M1–M6 ✅ completed, M7 ⏳ chưa bắt đầu)
 > Xem `STATUS.md` cho trạng thái hiện tại.
 > Spec cập nhật: 2026-08-31 — cập nhật Mục 18 (M6 Calendar Actions, từ HAR 3.13–3.17), thêm Mục 19 (M7 Calendar Interaction, từ HAR 3.17–3.18), cập nhật edge cases Mục 15 và roadmap.
 > Nguồn ưu tiên: HAR thực tế > quyết định thiết kế HinTeach > spec cũ.
@@ -638,6 +638,19 @@ dựa trên quyết định thiết kế nội bộ, không phụ thuộc behavi
 
 ## 18. Calendar Context Actions — M6
 
+> Implementation status: ✅ COMPLETED
+>
+> Commit: `80dc690`
+>
+> Tag: `gd3-m6-completed`
+>
+> Manual verification:
+> - Context menu
+> - Display color
+> - Copy/Paste
+> - Duplicate
+> - Delete shortcut
+
 Nguồn evidence:
 
 - HAR 3.13 — context menu
@@ -865,7 +878,7 @@ M5 ✅ Quick Entry + Session Record + Score
     - Quick entry session
     - Student details
     - Score records
-M6 ⏳ Calendar Actions
+M6 ✅ Calendar Actions
     - Context menu (session + empty area)
     - Display color propagation
     - Copy/Paste workflow

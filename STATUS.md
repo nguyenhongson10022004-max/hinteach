@@ -62,7 +62,7 @@ Chưa test:
 
 ## GĐ3 — Schedule
 
-**Status: 🟡 M5 COMPLETED**
+**Status: 🟢 M6 COMPLETED**
 
 Đã hoàn thành:
 
@@ -71,6 +71,7 @@ Chưa test:
 - M3 — Recurrence / Repeat Session ✅
 - M4 — Edit/Delete Recurrence ✅
 - M5 — Quick Entry / Session Record / Score ✅
+- M6 — Calendar Actions ✅
 
 ---
 
@@ -256,6 +257,82 @@ Commit:
 
 ---
 
+### M6 — Calendar Actions
+
+**Status: ✅ COMPLETED** (commit `80dc690`, tag `gd3-m6-completed`, 2026-08-31)
+
+Phạm vi hoàn thành:
+
+- Calendar context menu
+- Display color action
+- Copy/Paste session
+- Duplicate session
+- Delete shortcut
+
+Đã triển khai:
+
+Backend:
+
+- `hinteach_session_display_color`
+  - action đổi màu riêng
+  - permission `scheduler`
+  - validate hex color
+  - ownership check
+  - recurrence propagation current + following
+  - FREEZE target IDs trước update
+
+Frontend:
+
+- Context menu:
+  - Đổi màu
+  - Sao chép
+  - Nhân bản
+  - Xóa
+
+- Empty calendar menu:
+  - Thêm buổi học
+  - Dán
+
+- Copy/Paste:
+  - clipboard in-memory
+  - paste mở create form
+  - không copy recurrence/display_color
+
+- Duplicate:
+  - tìm slot trống cùng ngày
+  - khung 07:00–24:00
+  - tạo session độc lập
+
+- Display Color UX:
+  - preset colors
+  - custom color picker
+  - theo màu lớp
+
+Database:
+
+- Không thay đổi schema.
+
+Verification:
+
+- ✅ Build pass
+- ✅ PHP syntax pass
+- ✅ Context menu
+- ✅ Display color
+- ✅ Copy/Paste
+- ✅ Duplicate
+- ✅ Delete shortcut
+- ✅ Recurrence color propagation
+
+Commit:
+
+- `80dc690` — feat(schedule): complete gd3 m6 calendar actions
+
+Tag:
+
+- `gd3-m6-completed`
+
+---
+
 ### GĐ3 — Commits
 
 - `792e117` — feat: add read-only schedule calendar M1
@@ -277,6 +354,8 @@ Commit:
 - `40ce7cd` — feat: implement gd3 m5 quick entry
 
 - `16cd068` — docs: record gd3 m5 quick entry completion
+
+- `80dc690` — feat: complete gd3 m6 calendar actions
 ---
 
 ### GĐ3 — Completed
@@ -291,13 +370,14 @@ Commit:
 
 - M5 — Quick Entry / Session Record / Score ✅
 
+- M6 — Calendar Actions ✅
+
 ---
 
 ### GĐ3 — Còn lại
 
 Chưa triển khai:
 
-- M6 — Calendar Actions
 - M7 — Calendar Interaction
 
 ---
@@ -370,6 +450,8 @@ Không có bug tồn đọng đã xác định tại thời điểm này.
 
 ## Latest Important Changes
 
+- 2026-08-31: Hoàn thành GĐ3 M6 — Calendar Actions. Commit `80dc690`, tag `gd3-m6-completed`.
+
 - 2026-08-31: Hoàn thành GĐ3 M5 — Quick Entry / Session Record / Score. Commit `40ce7cd`.
 
 - 2026-08-29: Hoàn thành GĐ3 M2 — Create Single Session. Commit `f625fa1`, history `6f17bd3`.
@@ -386,12 +468,11 @@ Không có bug tồn đọng đã xác định tại thời điểm này.
 
 ## Next Recommended Task
 
-1. Hoàn tất đóng milestone GĐ3 M5:
-   - push commits lên origin
-   - tạo tag `gd3-m5-completed`
+1. Chuẩn bị GĐ3 M7:
+   - Review HAR 3.17–3.18
+   - Phân tích Drag Create / Drag Move
+   - Xác định scope và boundary trước implementation plan
 
-2. Chuẩn bị GĐ3 M6:
-   - đọc HAR Calendar Actions
-   - đọc bundle context menu
-   - lập Decision Log
-   - viết Implementation Plan trước khi code
+2. Không triển khai:
+   - Resize (chưa đủ evidence HAR)
+   - Các interaction ngoài M7 scope
