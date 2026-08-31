@@ -808,7 +808,7 @@ Behavior:
 
 > Implementation status: ✅ COMPLETED
 >
-> Commit: `<commit>`
+> Commit: `<d9a5bc7>`
 >
 > Tag: `gd3-m7-completed`
 >

@@ -539,7 +539,7 @@ Không có bug tồn đọng đã xác định tại thời điểm này.
 
 ## Latest Important Changes
 
-- 2026-08-31: Hoàn thành GĐ3 M7 — Calendar Interaction. Commit `<commit>`, tag `gd3-m7-completed`.
+- 2026-08-31: Hoàn thành GĐ3 M7 — Calendar Interaction. Commit `d9a5bc7`, tag `gd3-m7-completed`.
   - Drag Create
   - Drag Move
   - Time-grid
