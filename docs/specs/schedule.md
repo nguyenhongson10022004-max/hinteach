@@ -2,7 +2,7 @@
 
 > Module: Schedule | Status: **IN PROGRESS** (GĐ3 — M1–M5 ✅ completed, M6–M7 ⏳ chưa bắt đầu)
 > Xem `STATUS.md` cho trạng thái hiện tại.
-> Spec cập nhật: 2026-08-31 — thêm Implementation Status cho M5 (Mục 9) và cập nhật roadmap.
+> Spec cập nhật: 2026-08-31 — cập nhật Mục 18 (M6 Calendar Actions, từ HAR 3.13–3.17), thêm Mục 19 (M7 Calendar Interaction, từ HAR 3.17–3.18), cập nhật edge cases Mục 15 và roadmap.
 > Nguồn ưu tiên: HAR thực tế > quyết định thiết kế HinTeach > spec cũ.
 
 ---
@@ -583,11 +583,14 @@ dựa trên quyết định thiết kế nội bộ, không phụ thuộc behavi
 | Conflict khi edit (không phải create) gây trùng lịch | **[CHƯA XÁC NHẬN]** — HAR 3.6 chỉ xác nhận create/batch; sẽ xác định trong implementation plan |
 | Recurrence renumber sau delete following | **[HINTEACH DESIGN DECISION]** — Không áp dụng: HinTeach không persist `recurrence_sequence`, nên không có gì để renumber; thứ tự luôn tính động theo tuple ở Mục 4
 | Fee phân chia giữa các học sinh trong buổi chung (rule tổng quát) | **[HINTEACH DESIGN DECISION]** — fee_amount = NULL mặc định; tính động khi cần; xem `docs/specs/tuition.md` |
-| Copy field nào khi Sao chép buổi học | **[CHƯA XÁC NHẬN]** — xem Mục 18, cần phân tích thêm từ HAR 3.16 |
-| Paste tạo session mới qua API nào | **[CHƯA XÁC NHẬN]** — xem Mục 18 |
-| Duplicate: mở form prefill hay tạo ngay | **[CHƯA XÁC NHẬN]** — xem Mục 18 |
-| Recurrence khi copy/duplicate (có tạo group mới không) | **[CHƯA XÁC NHẬN]** — xem Mục 18 |
+| Copy field nào khi Sao chép buổi học | **[HAR CONFIRMED + BUNDLE CONFIRMED]** — xem Mục 18 (`sessionName`, `content`, `homeworkContent`, `generalComment`, `type`, `studentIds`, `studentDetails`, `price`; không copy `displayColor`/`recurrenceGroupId`/`recurrenceSequence`) |
+| Paste tạo session mới qua API nào | **[HAR CONFIRMED + BUNDLE CONFIRMED]** — Paste mở create form, prefill dữ liệu; không auto create — xem Mục 18 |
+| Duplicate: mở form prefill hay tạo ngay | **[HAR CONFIRMED + BUNDLE CONFIRMED]** — Tạo session mới trực tiếp sau khi tìm slot trống, không mở form — xem Mục 18 |
+| Recurrence khi copy/paste/duplicate (có tạo group mới không) | **[HAR CONFIRMED + BUNDLE CONFIRMED]** — Copy/Paste không giữ `recurrenceGroupId` của session gốc; Duplicate không giữ `recurrenceGroupId` của session gốc. **[HINTEACH DESIGN DECISION]** Các session tạo từ copy/paste/duplicate là session độc lập — xem Mục 18 |
 | Conflict handling khi paste/duplicate trùng lịch | **[CHƯA XÁC NHẬN]** — xem Mục 18 |
+| Drag move recurrence scope (có hỏi single/following không) | **[CHƯA XÁC NHẬN]** — xem Mục 19 |
+| Drag create save behavior | **[HAR CONFIRMED — HAR 3.18]** — mở create form, prefill thời gian, không auto-create — xem Mục 19 |
+| Resize session | **[CHƯA XÁC NHẬN]** — chưa có HAR, không implement trong M7 — xem Mục 19 |
 
 ---
 
@@ -633,18 +636,27 @@ dựa trên quyết định thiết kế nội bộ, không phụ thuộc behavi
 
 ---
 
-## 18. Calendar Context Actions — CHƯA IMPLEMENT
+## 18. Calendar Context Actions — M6
 
-Nguồn:
+Nguồn evidence:
 
-- HAR 3.13 — session context menu (chỉ xác nhận UI menu xuất hiện, chưa xác nhận API behavior)
+- HAR 3.13 — context menu
 - HAR 3.14 — change color context flow
-- HAR 3.15 — copy session (capture thao tác sao chép)
-- HAR 3.16 — paste session (capture flow dán tạo buổi mới)
+- HAR 3.15 — copy session
+- HAR 3.16 — paste session
+- HAR 3.17 — duplicate + drag session
 
-> Ghi chú: 4 HAR trên đã đủ evidence để bắt đầu phân tích và lập plan M6. Một số business rule (copy field, duplicate behavior, API contract) vẫn cần được chốt trong Decision Log của M6 — không cần lấy thêm HAR copy/paste riêng, vì UX thực tế là "Copy → Paste ở vị trí khác", không phải hai feature độc lập.
+Bundle:
 
-### Session context menu (chuột phải vào session)
+- context menu handler
+- `calendarSessionClipboard`
+- `duplicateCalendarSession`
+
+### Session context menu
+
+**[HAR CONFIRMED]**
+
+Chuột phải vào session:
 
 ```
 Buổi học
@@ -655,9 +667,110 @@ Buổi học
 └── 🗑 Xóa
 ```
 
-**Bỏ:** ✂ Cắt — vì Cắt = move/reschedule, kéo theo drag-drop, chưa làm ở phase này (xem M7).
+Không implement: `✂ Cắt`
+
+**[BUNDLE CONFIRMED]** Cut trong hệ thống tham khảo = copy + delete. HinTeach không đưa cut vào scope M6 vì kéo theo semantics move/reschedule (xem Mục 19 — Drag move).
+
+### Đổi màu (Display Color)
+
+**[HAR CONFIRMED — HAR 3.14]**
+
+Đổi màu là Calendar Action riêng, không đi qua generic session edit.
+
+Behavior:
+
+- Session thường: update đúng 1 session.
+- Session thuộc recurrence: current + following trong cùng recurrence group. Không ảnh hưởng session trước.
+
+**[HINTEACH DESIGN DECISION]** Frontend không tự xử lý propagation. Server chịu trách nhiệm xác định following theo rule recurrence ordering (xem Mục 4).
+
+### Sao chép (Copy)
+
+**[HAR CONFIRMED + BUNDLE CONFIRMED]**
+
+Copy không gọi API. Client lưu state trong `calendarSessionClipboard`.
+
+Behavior:
+
+- Lưu trong memory frontend.
+- Reload trang mất clipboard.
+- Không lưu database.
+
+### Dán (Paste)
+
+**[HAR CONFIRMED + BUNDLE CONFIRMED]**
+
+Flow:
+
+```
+Copy
+  ↓
+Paste
+  ↓
+Mở create session form
+  ↓
+Prefill data
+  ↓
+User xác nhận
+  ↓
+Create session
+```
+
+Paste **không** tự động tạo session.
+
+Field được copy **[HAR/BUNDLE CONFIRMED]**:
+
+- `sessionName`
+- `content`
+- `homeworkContent`
+- `generalComment`
+- `type`
+- `studentIds`
+- `studentDetails`
+- `price`
+
+Field **không** được copy:
+
+- `displayColor`
+- `recurrenceGroupId`
+- `recurrenceSequence`
+
+Paste tạo session độc lập (không tham gia recurrence group của session gốc).
+
+### Nhân bản (Duplicate)
+
+**[HAR CONFIRMED + BUNDLE CONFIRMED]**
+
+Duplicate khác Paste. Flow:
+
+```
+Duplicate
+  ↓
+Tìm slot trống
+  ↓
+POST tạo session mới
+```
+
+Behavior:
+
+- Tạo ngay, không mở form.
+- Copy dữ liệu session.
+- Không giữ recurrence.
+
+**[HINTEACH DESIGN DECISION]** Duplicate một session thuộc recurrence → tạo session độc lập, không tham gia `recurrenceGroupId` cũ.
+
+**[CHƯA XÁC NHẬN]**
+
+- Behavior khi không tìm được slot trống.
+- Conflict handling chi tiết khi duplicate.
+
+### Xóa (Delete shortcut)
+
+Reuse flow xóa ở Mục 7b. Không tạo delete logic mới.
 
 ### Empty calendar context menu (chuột phải vào vùng trống)
+
+**[HAR CONFIRMED]**
 
 ```
 Vị trí trống
@@ -666,57 +779,78 @@ Vị trí trống
 └── 📌 Dán
 ```
 
-**Behavior:**
+Behavior:
 
-- Nếu chưa copy gì → "Dán" disabled.
-- Nếu đã copy → "Dán" active.
+- Chưa copy → "Dán" disabled.
+- Có clipboard → "Dán" active.
 
-### Đổi màu
+---
 
-Đã rõ ràng — xem Mục 10:
+## 19. Calendar Interaction — M7
 
-- Action riêng biệt, không nhét vào generic session edit.
-- Propagate current + following trong recurrence chain.
-- UI cần tự implement, không phụ thuộc UI tham khảo.
+Nguồn:
 
-### Sao chép / Dán / Nhân bản — CHƯA IMPLEMENT
+- HAR 3.17 — drag session
+- HAR 3.18 — drag create session (kéo vùng thời gian trống để tạo nhanh buổi học)
 
-Cần chốt tiếp từ HAR 3.15–3.16 trước khi lập implementation plan:
+### Drag Create Session
 
-| Câu hỏi | Trạng thái |
-|---|---|
-| Copy lưu state ở client hay server | **[CHƯA XÁC NHẬN]** |
-| Paste gọi lại `POST /api/sessions` hay endpoint riêng | **[CHƯA XÁC NHẬN]** |
-| Copy field nào (class, student, price, content, color...) | **[CHƯA XÁC NHẬN]** |
-| Recurrence có được copy theo không | **[CHƯA XÁC NHẬN]** |
-| Duplicate = mở form tạo mới có prefill, hay tạo ngay lập tức | **[CHƯA XÁC NHẬN]** |
-| Conflict handling khi paste/duplicate trùng lịch | **[CHƯA XÁC NHẬN]** — có thể áp dụng cùng rule 409 ở Mục 5, cần xác nhận |
+**[HAR CONFIRMED — HAR 3.18]**
 
-### Không tự suy diễn
+Kéo một vùng thời gian trống trên calendar → tạo nhanh buổi học với `startTime`/`endTime` lấy từ vùng kéo.
 
-Không implement các behavior sau nếu chưa có HAR hoặc quyết định thiết kế rõ ràng:
-
-- Cơ chế lưu clipboard (client-side state vs server-side session).
-- API endpoint cụ thể cho paste/duplicate.
-- Danh sách field được copy.
-- Có tạo `recurrenceGroupId` mới khi duplicate một buổi thuộc chuỗi hay không.
-
-### Bước tiếp theo
-
-Trước khi code M6, cần tạo tài liệu plan riêng:
+Flow:
 
 ```
-docs/plans/gd3-calendar-actions-plan.md
+User chọn vùng thời gian trống trên calendar
+  ↓
+Calendar tính: date, startTime, endTime
+  ↓
+Mở form tạo buổi học
+  ↓
+Prefill thời gian đã chọn
+  ↓
+User nhập: class, students, type, price...
+  ↓
+Lưu
+  ↓
+POST tạo session
 ```
 
-theo đúng flow đã dùng ở M4:
+**Điểm quan trọng:** Không phải "kéo chuột → tự động tạo session". Mà là "kéo chuột → mở create modal → user confirm → tạo session".
 
-1. Đọc lại HAR 3.13–3.16.
-2. Đọc bundle context menu (nếu có).
-3. Chốt Decision Log cho từng câu hỏi ở bảng trên.
-4. Viết Plan.
-5. Owner approve.
-6. Code.
+Behavior:
+
+- Chỉ áp dụng cho vùng trống.
+- Không thay đổi session hiện có.
+
+Backend: **reuse** action tạo session đã có ở Mục 3 (`hinteach_session_save`). **Không tạo endpoint mới, không schema mới, không validation mới** — đây chỉ là UX shortcut frontend cho flow tạo buổi học đã tồn tại ở M2.
+
+### Drag Move
+
+**[HAR CONFIRMED]**
+
+Flow:
+
+```
+Drag session
+  ↓
+PUT session update
+```
+
+Reuse API sửa buổi học (Mục 7). Payload liên quan: `date`, `startTime`, `endTime`, `updateScope`.
+
+**[CHƯA XÁC NHẬN]**
+
+- Drag session thuộc recurrence có hỏi `updateScope` (single/following) không.
+- Resize duration behavior.
+- Conflict handling khi kéo.
+
+### Resize
+
+**[CHƯA XÁC NHẬN]**
+
+Chưa có HAR xác nhận. Không implement trong M7 nếu chưa có evidence.
 
 ---
 
@@ -732,12 +866,13 @@ M5 ✅ Quick Entry + Session Record + Score
     - Student details
     - Score records
 M6 ⏳ Calendar Actions
-    - Context menu shortcut
-    - Display color
-    - Copy/Paste
-    - Duplicate
+    - Context menu (session + empty area)
+    - Display color propagation
+    - Copy/Paste workflow
+    - Duplicate session
+    - Delete shortcut (reuse M4)
 M7 ⏳ Calendar Interaction
-    - Drag create
-    - Drag move
-    - Resize
+    - Drag create (reuse M2 hinteach_session_save — no new backend)
+    - Drag move (reuse M4 edit API)
+    - Resize — CHƯA CÓ HAR, không implement
 ```
