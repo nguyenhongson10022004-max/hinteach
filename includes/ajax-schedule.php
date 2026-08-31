@@ -16,11 +16,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 // Đăng ký AJAX actions
 add_action( 'wp_ajax_hinteach_session_list', 'hinteach_ajax_session_list' );
-add_action( 'wp_ajax_hinteach_session_get', 'hinteach_ajax_session_get' );       // M4
+add_action( 'wp_ajax_hinteach_session_get', 'hinteach_ajax_session_get' );                         // M4
 add_action( 'wp_ajax_hinteach_session_save', 'hinteach_ajax_session_save' );
 add_action( 'wp_ajax_hinteach_session_save_recurring', 'hinteach_ajax_session_save_recurring' );
-add_action( 'wp_ajax_hinteach_session_delete', 'hinteach_ajax_session_delete' ); // M4
-add_action( 'wp_ajax_hinteach_session_quick_entry', 'hinteach_ajax_session_quick_entry' ); // M5
+add_action( 'wp_ajax_hinteach_session_delete', 'hinteach_ajax_session_delete' );                   // M4
+add_action( 'wp_ajax_hinteach_session_quick_entry', 'hinteach_ajax_session_quick_entry' );         // M5
+add_action( 'wp_ajax_hinteach_session_display_color', 'hinteach_ajax_session_display_color' );     // M6
 
 // ──────────────────────────────────────────────────────────────
 // Helpers chung cho file này
@@ -1795,5 +1796,148 @@ function hinteach_ajax_session_quick_entry() {
         'message'          => 'Đã lưu nhật ký và điểm buổi học thành công.',
         'updated_students' => $updated_students,
         'created_scores'   => $created_scores,
+    ) );
+}
+
+// ──────────────────────────────────────────────────────────────
+// Handler: Đổi màu hiển thị buổi học (POST) — M6
+//
+// Action riêng biệt, không gộp vào session_save.
+// Logic propagation hoàn toàn do server quyết định:
+// - Buổi độc lập: đổi đúng 1 buổi.
+// - Buổi trong recurrence group: áp dụng cho current + following
+//   theo tuple (repeat_group_id, date, start_time, id).
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * Cập nhật màu hiển thị (display_color) cho buổi học.
+ *
+ * Input (POST):
+ *   session_id     int     Bắt buộc
+ *   display_color  string  Hex format (#RRGGBB) hoặc rỗng để xoá màu
+ *
+ * Response success:
+ *   { id: int, updated_count: int, display_color: string|null, message: string }
+ */
+function hinteach_ajax_session_display_color() {
+    $access = hinteach_schedule_check_access();
+
+    $session_id = isset( $_POST['session_id'] ) ? absint( $_POST['session_id'] ) : 0;
+    if ( ! $session_id ) {
+        wp_send_json_error( array( 'message' => 'Thiếu session_id.' ), 400 );
+    }
+
+    $display_color = isset( $_POST['display_color'] ) ? sanitize_text_field( wp_unslash( $_POST['display_color'] ) ) : '';
+    if ( ! empty( $display_color ) ) {
+        $sanitized_color = sanitize_hex_color( $display_color );
+        if ( ! $sanitized_color ) {
+            wp_send_json_error( array( 'message' => 'Màu hiển thị không hợp lệ (định dạng #RRGGBB).' ), 400 );
+        }
+        $display_color = $sanitized_color;
+    } else {
+        $display_color = null;
+    }
+
+    global $wpdb;
+    $s_table = $wpdb->prefix . 'hinteach_sessions';
+    $c_table = $wpdb->prefix . 'hinteach_classes';
+
+    // Load session + class ownership
+    $session = $wpdb->get_row( $wpdb->prepare(
+        "SELECT s.*, c.teacher_id
+         FROM {$s_table} s
+         JOIN {$c_table} c ON s.class_id = c.id AND c.deleted_at IS NULL
+         WHERE s.id = %d AND s.deleted_at IS NULL",
+        $session_id
+    ) );
+
+    if ( ! $session ) {
+        wp_send_json_error( array( 'message' => 'Buổi học không tồn tại hoặc đã bị xoá.' ), 404 );
+    }
+
+    // Ownership check
+    if ( ! current_user_can( 'manage_hinteach_all' ) && (int) $session->teacher_id !== $access['teacher_id'] ) {
+        wp_send_json_error( array( 'message' => 'Bạn không có quyền đổi màu buổi học này.' ), 403 );
+    }
+
+    $now = current_time( 'mysql' );
+
+    // ── Xử lý recurrence propagation ──
+    if ( $session->repeat_group_id ) {
+        // FREEZE danh sách target IDs theo tuple (repeat_group_id, date, start_time, id)
+        $target_ids = $wpdb->get_col( $wpdb->prepare(
+            "SELECT id FROM {$s_table}
+             WHERE repeat_group_id = %d
+               AND deleted_at IS NULL
+               AND (
+                   date > %s
+                   OR (date = %s AND start_time > %s)
+                   OR (date = %s AND start_time = %s AND id >= %d)
+               )
+             ORDER BY date ASC, start_time ASC, id ASC",
+            (int) $session->repeat_group_id,
+            $session->date,
+            $session->date, $session->start_time,
+            $session->date, $session->start_time, $session_id
+        ) );
+        $target_ids = array_map( 'intval', $target_ids );
+
+        if ( empty( $target_ids ) ) {
+            wp_send_json_error( array( 'message' => 'Không tìm thấy buổi nào để cập nhật màu.' ), 400 );
+        }
+
+        $wpdb->query( 'START TRANSACTION' );
+
+        $updated_count = 0;
+        foreach ( $target_ids as $tid ) {
+            $ok = $wpdb->update(
+                $s_table,
+                array(
+                    'display_color' => $display_color,
+                    'updated_at'    => $now,
+                ),
+                array( 'id' => $tid ),
+                array( '%s', '%s' ),
+                array( '%d' )
+            );
+
+            if ( false === $ok ) {
+                $wpdb->query( 'ROLLBACK' );
+                wp_send_json_error( array( 'message' => 'Không thể đổi màu buổi học ID ' . $tid . '. Vui lòng thử lại.' ), 500 );
+            }
+            $updated_count++;
+        }
+
+        $wpdb->query( 'COMMIT' );
+
+        wp_send_json_success( array(
+            'id'            => $session_id,
+            'updated_count' => $updated_count,
+            'display_color' => $display_color,
+            'message'       => 'Đã đổi màu ' . $updated_count . ' buổi học trong chuỗi lặp.',
+        ) );
+    }
+
+    // ── Buổi học đơn lẻ (không thuộc chuỗi lặp) ──
+    $ok = $wpdb->update(
+        $s_table,
+        array(
+            'display_color' => $display_color,
+            'updated_at'    => $now,
+        ),
+        array( 'id' => $session_id ),
+        array( '%s', '%s' ),
+        array( '%d' )
+    );
+
+    if ( false === $ok ) {
+        wp_send_json_error( array( 'message' => 'Không thể đổi màu buổi học. Vui lòng thử lại.' ), 500 );
+    }
+
+    wp_send_json_success( array(
+        'id'            => $session_id,
+        'updated_count' => 1,
+        'display_color' => $display_color,
+        'message'       => 'Đã đổi màu buổi học thành công.',
     ) );
 }

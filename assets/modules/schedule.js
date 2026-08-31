@@ -15,6 +15,15 @@ const ScheduleModule = {
     /** Ngày bất kỳ trong tuần đang xem — state nội bộ */
     _currentDate: new Date(),
 
+    /** Danh sách sessions tuần hiện tại */
+    _sessions: [],
+
+    /** Clipboard lưu session in-memory */
+    _calendarSessionClipboard: null,
+
+    /** Reference context menu element đang mở */
+    _contextMenuEl: null,
+
     // ──────────────────────────────────────────────────────────
     // Entry point — gọi bởi HT.router.navigate('schedule')
     // ──────────────────────────────────────────────────────────
@@ -26,6 +35,7 @@ const ScheduleModule = {
     async render( container ) {
         // Reset về tuần hiện tại mỗi lần mount tab
         this._currentDate = new Date();
+        this._dismissContextMenu();
 
         container.innerHTML = `
             <div class="ht-module ht-module--schedule">
@@ -56,13 +66,16 @@ const ScheduleModule = {
         const cal = document.getElementById( 'ht-schedule-calendar' );
         if ( ! cal ) return;
 
+        this._dismissContextMenu();
         const week = this._getWeekRange( this._currentDate );
 
         try {
             const sessions = await this._loadSessions( week.fromStr, week.toStr );
+            this._sessions = sessions;
             cal.innerHTML = this._buildCalendarHtml( week, sessions );
             this._bindNavEvents();
             this._bindSessionEvents();
+            this._bindCalendarAreaEvents();
         } catch ( err ) {
             cal.innerHTML = `<div class="ht-error"><p>Lỗi tải lịch: ${HT.utils.escapeHtml(err.message)}</p></div>`;
         }
@@ -109,7 +122,7 @@ const ScheduleModule = {
                         <span class="ht-cal__day-name">${DAY_LABELS[ i ]}</span>
                         <span class="ht-cal__day-date">${this._fmtShort( isoDate )}</span>
                     </div>
-                    <div class="ht-cal__day-body">
+                    <div class="ht-cal__day-body" data-date="${isoDate}">
                         ${blocks}
                     </div>
                 </div>
@@ -152,12 +165,32 @@ const ScheduleModule = {
         `;
     },
 
-    /** Bind click sự kiện trên các session block để mở modal chỉnh sửa */
+    /** Bind click & contextmenu sự kiện trên các session block */
     _bindSessionEvents() {
         document.querySelectorAll( '.ht-session-block[data-id]' ).forEach( el => {
             el.addEventListener( 'click', () => {
                 const id = parseInt( el.dataset.id, 10 );
                 if ( id ) this._openEditForm( id );
+            } );
+            el.addEventListener( 'contextmenu', ( e ) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const id = parseInt( el.dataset.id, 10 );
+                if ( id ) this._showSessionContextMenu( e, id );
+            } );
+        } );
+    },
+
+    /** Bind contextmenu sự kiện trên vùng lịch trống */
+    _bindCalendarAreaEvents() {
+        document.querySelectorAll( '.ht-cal__day-body[data-date]' ).forEach( el => {
+            el.addEventListener( 'contextmenu', ( e ) => {
+                // Chỉ mở khi click vào vùng trống (không phải trên session block)
+                if ( e.target.closest( '.ht-session-block' ) ) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const date = el.dataset.date;
+                if ( date ) this._showEmptyContextMenu( e, date );
             } );
         } );
     },
@@ -253,8 +286,11 @@ const ScheduleModule = {
     /**
      * Mở form tạo buổi học mới.
      * Load danh sách lớp, hiển modal, bind events.
+     * Hỗ trợ prefill khi Dán buổi học (Paste).
+     *
+     * @param {Object|null} prefill
      */
-    async _openCreateForm() {
+    async _openCreateForm( prefill = null ) {
         // Load danh sách lớp
         let classes = [];
         try {
@@ -271,10 +307,12 @@ const ScheduleModule = {
         }
 
         const today = this._toIso( new Date() );
+        const defaultDate = prefill?.date || today;
+        const modalTitle = prefill?.isPaste ? 'Tạo buổi học (Dán)' : 'Tạo buổi học mới';
 
         HT.modal.open( {
-            title: 'Tạo buổi học mới',
-            body: this._buildCreateFormHtml( classes, today ),
+            title: modalTitle,
+            body: this._buildCreateFormHtml( classes, defaultDate, prefill ),
             footer: `
                 <button type="button" class="ht-btn ht-btn--secondary" id="ht-session-form-cancel">Huỷ</button>
                 <button type="button" class="ht-btn ht-btn--primary" id="ht-session-form-save">Tạo buổi</button>
@@ -329,16 +367,32 @@ const ScheduleModule = {
             } );
         document.getElementById( 'ht-sf-custom-add' )
             ?.addEventListener( 'click', () => this._addCustomRepeatDate() );
+
+        // Nếu có prefill class_id (Paste), load học sinh và check checkboxes
+        if ( prefill?.class_id ) {
+            await this._onClassChange( prefill.class_id, prefill.student_ids || [], prefill.price );
+        }
     },
 
     /**
      * Build HTML form tạo buổi học.
      *
-     * @param {Array} classes    Danh sách lớp
-     * @param {string} defaultDate  YYYY-MM-DD
+     * @param {Array} classes        Danh sách lớp
+     * @param {string} defaultDate   YYYY-MM-DD
+     * @param {Object|null} prefill  Dữ liệu prefill (Paste)
      * @returns {string} HTML
      */
-    _buildCreateFormHtml( classes, defaultDate ) {
+    _buildCreateFormHtml( classes, defaultDate, prefill = null ) {
+        const selectedClassId = prefill?.class_id ? Number( prefill.class_id ) : '';
+        const startTime       = prefill?.start_time || '';
+        const endTime         = prefill?.end_time || '';
+        const type            = prefill?.type || 'riêng';
+        const price           = prefill?.price !== undefined ? prefill.price : 0;
+        const sessionName     = prefill?.session_name ? HT.utils.escapeHtml( prefill.session_name ) : '';
+        const content         = prefill?.content ? HT.utils.escapeHtml( prefill.content ) : '';
+        const homework        = prefill?.homework_content ? HT.utils.escapeHtml( prefill.homework_content ) : '';
+        const comment         = prefill?.general_comment ? HT.utils.escapeHtml( prefill.general_comment ) : '';
+
         return `
             <form id="ht-session-form" class="ht-form">
                 <fieldset class="ht-form__fieldset">
@@ -347,7 +401,11 @@ const ScheduleModule = {
                         <label class="ht-form__label" for="ht-sf-class">Lớp *</label>
                         <select id="ht-sf-class" name="class_id" class="ht-form__select" required>
                             <option value="">-- Chọn lớp --</option>
-                            ${classes.map( c => `<option value="${c.id}" data-fee="${c.fee_amount || 0}">${HT.utils.escapeHtml( c.name )}</option>` ).join( '' )}
+                            ${classes.map( c => `
+                                <option value="${c.id}" data-fee="${c.fee_amount || 0}" ${Number( c.id ) === selectedClassId ? 'selected' : ''}>
+                                    ${HT.utils.escapeHtml( c.name )}
+                                </option>
+                            ` ).join( '' )}
                         </select>
                     </div>
                 </fieldset>
@@ -361,11 +419,11 @@ const ScheduleModule = {
                     <div class="ht-form__row">
                         <div class="ht-form__row-half">
                             <label class="ht-form__label" for="ht-sf-start">Bắt đầu *</label>
-                            <input type="time" id="ht-sf-start" name="start_time" class="ht-form__input" required />
+                            <input type="time" id="ht-sf-start" name="start_time" class="ht-form__input" required value="${startTime}" />
                         </div>
                         <div class="ht-form__row-half">
                             <label class="ht-form__label" for="ht-sf-end">Kết thúc *</label>
-                            <input type="time" id="ht-sf-end" name="end_time" class="ht-form__input" required />
+                            <input type="time" id="ht-sf-end" name="end_time" class="ht-form__input" required value="${endTime}" />
                         </div>
                     </div>
                 </fieldset>
@@ -375,8 +433,8 @@ const ScheduleModule = {
                     <div class="ht-form__row">
                         <label class="ht-form__label">Loại buổi *</label>
                         <div class="ht-form__radio-group">
-                            <label><input type="radio" name="type" value="riêng" checked /> Riêng (1-1)</label>
-                            <label><input type="radio" name="type" value="chung" /> Chung (nhóm)</label>
+                            <label><input type="radio" name="type" value="riêng" ${type === 'riêng' ? 'checked' : ''} /> Riêng (1-1)</label>
+                            <label><input type="radio" name="type" value="chung" ${type === 'chung' ? 'checked' : ''} /> Chung (nhóm)</label>
                         </div>
                     </div>
                     <div class="ht-form__row" id="ht-sf-students-container">
@@ -389,11 +447,23 @@ const ScheduleModule = {
                     <legend>Chi tiết</legend>
                     <div class="ht-form__row">
                         <label class="ht-form__label" for="ht-sf-price">Học phí buổi</label>
-                        <input type="number" id="ht-sf-price" name="price" class="ht-form__input" min="0" step="1000" value="0" />
+                        <input type="number" id="ht-sf-price" name="price" class="ht-form__input" min="0" step="1000" value="${price}" />
                     </div>
                     <div class="ht-form__row">
                         <label class="ht-form__label" for="ht-sf-name">Tên buổi học</label>
-                        <input type="text" id="ht-sf-name" name="session_name" class="ht-form__input" placeholder="(Tuỳ chọn)" />
+                        <input type="text" id="ht-sf-name" name="session_name" class="ht-form__input" placeholder="(Tuỳ chọn)" value="${sessionName}" />
+                    </div>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label" for="ht-sf-content">Nội dung buổi học</label>
+                        <textarea id="ht-sf-content" name="content" class="ht-form__textarea" rows="2" placeholder="(Tuỳ chọn)">${content}</textarea>
+                    </div>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label" for="ht-sf-homework">Nội dung bài tập về nhà</label>
+                        <textarea id="ht-sf-homework" name="homework_content" class="ht-form__textarea" rows="2" placeholder="(Tuỳ chọn)">${homework}</textarea>
+                    </div>
+                    <div class="ht-form__row">
+                        <label class="ht-form__label" for="ht-sf-comment">Nhận xét chung</label>
+                        <textarea id="ht-sf-comment" name="general_comment" class="ht-form__textarea" rows="2" placeholder="(Tuỳ chọn)">${comment}</textarea>
                     </div>
                     <div class="ht-form__row">
                         <label class="ht-form__label">Màu hiển thị</label>
@@ -464,8 +534,10 @@ const ScheduleModule = {
      * Khi chọn lớp → load danh sách học sinh + prefill giá.
      *
      * @param {string} classId
+     * @param {Array} prefillStudentIds
+     * @param {number|null} prefillPrice
      */
-    async _onClassChange( classId ) {
+    async _onClassChange( classId, prefillStudentIds = [], prefillPrice = null ) {
         const container = document.getElementById( 'ht-sf-students-container' );
         if ( ! container ) return;
 
@@ -487,13 +559,17 @@ const ScheduleModule = {
             const students  = data.students || [];
             const classData = data.class;
 
-            // Prefill giá từ class.fee_amount
+            // Prefill giá từ class.fee_amount hoặc prefillPrice nếu có
             const priceInput = document.getElementById( 'ht-sf-price' );
-            if ( priceInput && classData && classData.fee_amount ) {
-                priceInput.value = classData.fee_amount;
+            if ( priceInput ) {
+                if ( prefillPrice !== null && prefillPrice !== undefined ) {
+                    priceInput.value = prefillPrice;
+                } else if ( classData && classData.fee_amount ) {
+                    priceInput.value = classData.fee_amount;
+                }
             }
 
-            this._renderStudentsList( students );
+            this._renderStudentsList( students, prefillStudentIds );
         } catch ( err ) {
             container.innerHTML = `
                 <label class="ht-form__label">Học sinh *</label>
@@ -506,8 +582,9 @@ const ScheduleModule = {
      * Render danh sách học sinh (checkboxes) trong form.
      *
      * @param {Array} students
+     * @param {Array} prefillStudentIds
      */
-    _renderStudentsList( students ) {
+    _renderStudentsList( students, prefillStudentIds = [] ) {
         const container = document.getElementById( 'ht-sf-students-container' );
         if ( ! container ) return;
 
@@ -521,16 +598,20 @@ const ScheduleModule = {
 
         const type = document.querySelector( 'input[name="type"]:checked' )?.value || 'riêng';
         const hint = type === 'riêng' ? '(chọn 1)' : '(chọn ít nhất 2)';
+        const selectedIds = Array.isArray( prefillStudentIds ) ? prefillStudentIds.map( id => Number( id ) ) : [];
 
         container.innerHTML = `
             <label class="ht-form__label">Học sinh * ${hint}</label>
             <div class="ht-multi-select" id="ht-sf-students">
-                ${students.map( s => `
-                    <label class="ht-multi-select__item">
-                        <input type="checkbox" name="student_ids" value="${s.id}" />
-                        <span>${HT.utils.escapeHtml( s.name )}</span>
-                    </label>
-                ` ).join( '' )}
+                ${students.map( s => {
+                    const checked = selectedIds.includes( Number( s.id ) ) ? 'checked' : '';
+                    return `
+                        <label class="ht-multi-select__item">
+                            <input type="checkbox" name="student_ids" value="${s.id}" ${checked} />
+                            <span>${HT.utils.escapeHtml( s.name )}</span>
+                        </label>
+                    `;
+                } ).join( '' )}
             </div>
         `;
     },
@@ -777,6 +858,9 @@ const ScheduleModule = {
         const type      = form.querySelector( 'input[name="type"]:checked' )?.value || '';
         const price     = form.querySelector( '[name="price"]' )?.value || '0';
         const sessName  = form.querySelector( '[name="session_name"]' )?.value || '';
+        const content   = form.querySelector( '[name="content"]' )?.value || '';
+        const homework  = form.querySelector( '[name="homework_content"]' )?.value || '';
+        const comment   = form.querySelector( '[name="general_comment"]' )?.value || '';
 
         // Color — chỉ gửi nếu checkbox bật
         const colorToggle  = document.getElementById( 'ht-sf-color-toggle' );
@@ -816,15 +900,18 @@ const ScheduleModule = {
 
         // Payload
         const payload = {
-            class_id:      classId,
-            date:          date,
-            start_time:    startTime,
-            end_time:      endTime,
-            type:          type,
-            student_ids:   studentIds,
-            price:         price,
-            session_name:  sessName,
-            display_color: displayColor,
+            class_id:         classId,
+            date:             date,
+            start_time:       startTime,
+            end_time:         endTime,
+            type:             type,
+            student_ids:      studentIds,
+            price:            price,
+            session_name:     sessName,
+            content:          content,
+            homework_content: homework,
+            general_comment:  comment,
+            display_color:    displayColor,
         };
 
         // M3: Thêm repeat_dates nếu recurring
@@ -1562,6 +1649,466 @@ const ScheduleModule = {
             await this._render();
         } catch ( err ) {
             HT.utils.toast( err.message, 'error' );
+        }
+    },
+
+    // ──────────────────────────────────────────────────────────
+    // M6: Calendar Actions (Context Menu, Color, Copy, Paste, Duplicate)
+    // ──────────────────────────────────────────────────────────
+
+    /** Đóng context menu hiện tại nếu có */
+    _dismissContextMenu() {
+        if ( this._contextMenuEl ) {
+            this._contextMenuEl.remove();
+            this._contextMenuEl = null;
+        }
+    },
+
+    /**
+     * Đặt vị trí và hiển thị context menu trong viewport.
+     *
+     * @param {HTMLElement} menu
+     * @param {MouseEvent} e
+     */
+    _positionContextMenu( menu, e ) {
+        document.body.appendChild( menu );
+        this._contextMenuEl = menu;
+
+        const rect = menu.getBoundingClientRect();
+        let x = e.clientX;
+        let y = e.clientY;
+
+        if ( x + rect.width > window.innerWidth ) {
+            x = Math.max( 10, window.innerWidth - rect.width - 10 );
+        }
+        if ( y + rect.height > window.innerHeight ) {
+            y = Math.max( 10, window.innerHeight - rect.height - 10 );
+        }
+
+        menu.style.left = `${x}px`;
+        menu.style.top  = `${y}px`;
+
+        const onDocClick = ( evt ) => {
+            if ( ! menu.contains( evt.target ) ) {
+                this._dismissContextMenu();
+                document.removeEventListener( 'click', onDocClick );
+                document.removeEventListener( 'contextmenu', onDocClick );
+            }
+        };
+
+        const onKeyDown = ( evt ) => {
+            if ( evt.key === 'Escape' ) {
+                this._dismissContextMenu();
+                document.removeEventListener( 'keydown', onKeyDown );
+            }
+        };
+
+        setTimeout( () => {
+            document.addEventListener( 'click', onDocClick );
+            document.addEventListener( 'contextmenu', onDocClick );
+            document.addEventListener( 'keydown', onKeyDown );
+        }, 0 );
+    },
+
+    /**
+     * Hiển thị context menu cho 1 buổi học (chuột phải).
+     * 4 actions: Đổi màu, Sao chép, Nhân bản, Xóa.
+     *
+     * @param {MouseEvent} e
+     * @param {number} sessionId
+     */
+    /**
+     * Hiển thị context menu cho 1 buổi học (chuột phải).
+     * 4 actions: Đổi màu (Preset / Màu khác / Theo màu lớp), Sao chép, Nhân bản, Xóa.
+     *
+     * @param {MouseEvent} e
+     * @param {number} sessionId
+     */
+    _showSessionContextMenu( e, sessionId ) {
+        this._dismissContextMenu();
+
+        const menu = document.createElement( 'div' );
+        menu.className = 'ht-context-menu';
+
+        const paletteColors = [
+            '#4A90D9', '#2E7D32', '#E65100', '#C2185B', '#7B1FA2',
+            '#0097A7', '#D32F2F', '#F57C00', '#455A64', '#10B981'
+        ];
+
+        const swatchesHtml = paletteColors.map( c => `
+            <button type="button" class="ht-color-swatch" data-color="${c}" style="background:${c};" title="Màu ${c}"></button>
+        ` ).join( '' );
+
+        menu.innerHTML = `
+            <div class="ht-color-swatches">
+                <div class="ht-color-swatches__header">
+                    <span class="ht-color-swatches__title">🎨 Đổi màu hiển thị</span>
+                </div>
+                <div class="ht-color-swatches__grid">
+                    ${swatchesHtml}
+                </div>
+                <div class="ht-color-swatches__actions">
+                    <label class="ht-color-action-btn ht-color-action-btn--custom" title="Chọn màu bất kỳ">
+                        <input type="color" class="ht-color-action-input" id="ht-ctx-color-custom" value="#4A90D9" />
+                        <span class="ht-color-action-btn__icon">🌈</span>
+                        <span class="ht-color-action-btn__text">Màu khác…</span>
+                    </label>
+                    <button type="button" class="ht-color-action-btn ht-color-action-btn--reset" id="ht-ctx-color-class" title="Xoá màu riêng, hiển thị theo màu của lớp">
+                        <span class="ht-color-action-btn__icon">🏷</span>
+                        <span class="ht-color-action-btn__text">Theo màu lớp</span>
+                    </button>
+                </div>
+            </div>
+            <div class="ht-context-menu__divider"></div>
+            <button type="button" class="ht-context-menu__item" id="ht-ctx-copy">
+                <span class="ht-context-menu__icon">📋</span> Sao chép
+            </button>
+            <button type="button" class="ht-context-menu__item" id="ht-ctx-duplicate">
+                <span class="ht-context-menu__icon">⊕</span> Nhân bản
+            </button>
+            <div class="ht-context-menu__divider"></div>
+            <button type="button" class="ht-context-menu__item ht-context-menu__item--danger" id="ht-ctx-delete">
+                <span class="ht-context-menu__icon">🗑</span> Xóa
+            </button>
+        `;
+
+        // 1. Bind preset color swatches
+        menu.querySelectorAll( '.ht-color-swatch' ).forEach( btn => {
+            btn.addEventListener( 'click', async ( evt ) => {
+                evt.stopPropagation();
+                const color = btn.dataset.color || '';
+                this._dismissContextMenu();
+                await this._changeDisplayColor( sessionId, color );
+            } );
+        } );
+
+        // 2. Bind "Màu khác..." custom color picker
+        const customColorInput = menu.querySelector( '#ht-ctx-color-custom' );
+        customColorInput?.addEventListener( 'click', ( evt ) => {
+            evt.stopPropagation();
+        } );
+        customColorInput?.addEventListener( 'change', async ( evt ) => {
+            evt.stopPropagation();
+            const chosenColor = customColorInput.value;
+            if ( chosenColor ) {
+                this._dismissContextMenu();
+                await this._changeDisplayColor( sessionId, chosenColor );
+            }
+        } );
+
+        // 3. Bind "Theo màu lớp" (clear display_color)
+        menu.querySelector( '#ht-ctx-color-class' )?.addEventListener( 'click', async ( evt ) => {
+            evt.stopPropagation();
+            this._dismissContextMenu();
+            await this._changeDisplayColor( sessionId, '' );
+        } );
+
+        // Bind copy
+        menu.querySelector( '#ht-ctx-copy' )?.addEventListener( 'click', async ( evt ) => {
+            evt.stopPropagation();
+            this._dismissContextMenu();
+            await this._copySession( sessionId );
+        } );
+
+        // Bind duplicate
+        menu.querySelector( '#ht-ctx-duplicate' )?.addEventListener( 'click', async ( evt ) => {
+            evt.stopPropagation();
+            this._dismissContextMenu();
+            await this._duplicateSession( sessionId );
+        } );
+
+        // Bind delete
+        menu.querySelector( '#ht-ctx-delete' )?.addEventListener( 'click', async ( evt ) => {
+            evt.stopPropagation();
+            this._dismissContextMenu();
+            await this._deleteSessionShortcut( sessionId );
+        } );
+
+        this._positionContextMenu( menu, e );
+    },
+
+    /**
+     * Hiển thị context menu trên vị trí lịch trống (chuột phải).
+     * 2 actions: Thêm buổi học, Dán.
+     *
+     * @param {MouseEvent} e
+     * @param {string} date YYYY-MM-DD
+     */
+    _showEmptyContextMenu( e, date ) {
+        this._dismissContextMenu();
+
+        const menu = document.createElement( 'div' );
+        menu.className = 'ht-context-menu';
+
+        const hasClipboard = !! this._calendarSessionClipboard;
+
+        menu.innerHTML = `
+            <button type="button" class="ht-context-menu__item" id="ht-ctx-add">
+                <span class="ht-context-menu__icon">＋</span> Thêm buổi học
+            </button>
+            <button type="button" class="ht-context-menu__item${! hasClipboard ? ' ht-context-menu__item--disabled' : ''}" id="ht-ctx-paste">
+                <span class="ht-context-menu__icon">📌</span> Dán
+            </button>
+        `;
+
+        menu.querySelector( '#ht-ctx-add' )?.addEventListener( 'click', ( evt ) => {
+            evt.stopPropagation();
+            this._dismissContextMenu();
+            this._openCreateForm( { date: date } );
+        } );
+
+        if ( hasClipboard ) {
+            menu.querySelector( '#ht-ctx-paste' )?.addEventListener( 'click', ( evt ) => {
+                evt.stopPropagation();
+                this._dismissContextMenu();
+                this._pasteSession( date );
+            } );
+        }
+
+        this._positionContextMenu( menu, e );
+    },
+
+    /**
+     * Đổi màu hiển thị buổi học (gọi API riêng biệt).
+     *
+     * @param {number} sessionId
+     * @param {string} color Hex hoặc ''
+     */
+    async _changeDisplayColor( sessionId, color ) {
+        try {
+            const result = await HT.api.call( 'hinteach_session_display_color', {
+                session_id:    sessionId,
+                display_color: color,
+            } );
+            HT.utils.toast( result.message || 'Đã đổi màu buổi học.' );
+            await this._render();
+        } catch ( err ) {
+            HT.utils.toast( err.message || 'Không thể đổi màu buổi học.', 'error' );
+        }
+    },
+
+    /**
+     * Sao chép buổi học vào clipboard in-memory.
+     *
+     * @param {number} sessionId
+     */
+    async _copySession( sessionId ) {
+        try {
+            const data = await HT.api.call( 'hinteach_session_get', { session_id: sessionId }, 'GET' );
+            const session = data.session;
+            if ( ! session ) {
+                HT.utils.toast( 'Không tìm thấy buổi học để sao chép.', 'error' );
+                return;
+            }
+
+            // Clone dữ liệu, bỏ display_color và thông tin recurrence
+            this._calendarSessionClipboard = {
+                class_id:         session.class_id,
+                type:             session.type,
+                price:            session.price,
+                session_name:     session.session_name || '',
+                content:          session.content || '',
+                homework_content: session.homework_content || '',
+                general_comment:  session.general_comment || '',
+                start_time:       session.start_time,
+                end_time:         session.end_time,
+                student_ids:      ( session.students || [] ).map( s => parseInt( s.student_id, 10 ) ),
+            };
+
+            HT.utils.toast( 'Đã sao chép buổi học vào bộ nhớ tạm.' );
+        } catch ( err ) {
+            HT.utils.toast( 'Lỗi khi sao chép: ' + err.message, 'error' );
+        }
+    },
+
+    /**
+     * Dán buổi học: mở modal tạo buổi và prefill dữ liệu đã sao chép.
+     *
+     * @param {string} targetDate YYYY-MM-DD
+     */
+    _pasteSession( targetDate ) {
+        if ( ! this._calendarSessionClipboard ) {
+            HT.utils.toast( 'Bộ nhớ tạm rỗng. Vui lòng sao chép một buổi học trước.', 'error' );
+            return;
+        }
+
+        const clip = this._calendarSessionClipboard;
+        this._openCreateForm( {
+            isPaste:          true,
+            date:             targetDate,
+            start_time:       clip.start_time ? clip.start_time.slice( 0, 5 ) : '',
+            end_time:         clip.end_time ? clip.end_time.slice( 0, 5 ) : '',
+            class_id:         clip.class_id,
+            type:             clip.type,
+            price:            clip.price,
+            session_name:     clip.session_name,
+            content:          clip.content,
+            homework_content: clip.homework_content,
+            general_comment:  clip.general_comment,
+            student_ids:      clip.student_ids || [],
+        } );
+    },
+
+    /**
+     * Chuyển chuỗi HH:MM hoặc HH:MM:SS thành số phút từ đầu ngày.
+     *
+     * @param {string} timeStr
+     * @returns {number}
+     */
+    _timeToMinutes( timeStr ) {
+        if ( ! timeStr ) return 0;
+        const parts = timeStr.slice( 0, 5 ).split( ':' );
+        return parseInt( parts[ 0 ], 10 ) * 60 + parseInt( parts[ 1 ], 10 );
+    },
+
+    /**
+     * Chuyển số phút thành chuỗi định dạng HH:MM.
+     *
+     * @param {number} mins
+     * @returns {string}
+     */
+    _minutesToTime( mins ) {
+        const h = Math.floor( mins / 60 );
+        const m = mins % 60;
+        return `${String( h ).padStart( 2, '0' )}:${String( m ).padStart( 2, '0' )}`;
+    },
+
+    /**
+     * Thuật toán tìm slot trống trong ngày cho action Nhân bản (Duplicate).
+     * Khung giờ: 07:00 – 24:00 cùng ngày.
+     *
+     * @param {Object} session      Session nguồn
+     * @param {Array}  allSessions  Danh sách sessions hiện có trong tuần
+     * @returns {{ start_time: string, end_time: string }|null}
+     */
+    _findDuplicateSlot( session, allSessions ) {
+        const sStartM = this._timeToMinutes( session.start_time );
+        const sEndM   = this._timeToMinutes( session.end_time );
+        const durM    = sEndM - sStartM;
+
+        if ( durM <= 0 ) return null;
+
+        const daySessions = allSessions.filter( s => s.date === session.date && Number( s.id ) !== Number( session.id ) );
+
+        const isSlotBusy = ( startM, endM ) => {
+            return daySessions.some( s => {
+                const ss = this._timeToMinutes( s.start_time );
+                const se = this._timeToMinutes( s.end_time );
+                return ( startM < se && endM > ss );
+            } );
+        };
+
+        const EARLIEST = 7 * 60;   // 07:00
+        const LATEST   = 24 * 60;  // 24:00
+
+        // Priority 1: Ngay sau endTime của session gốc
+        if ( sEndM + durM <= LATEST && ! isSlotBusy( sEndM, sEndM + durM ) ) {
+            return {
+                start_time: this._minutesToTime( sEndM ),
+                end_time:   this._minutesToTime( sEndM + durM ),
+            };
+        }
+
+        // Priority 2: Mở rộng tìm kiếm ±30 phút mỗi bước quanh mốc sEndM
+        const maxOffset = Math.max( LATEST - sEndM, sEndM - EARLIEST );
+        for ( let offset = 30; offset <= maxOffset; offset += 30 ) {
+            // Thử hướng sau: sEndM + offset
+            const afterStart = sEndM + offset;
+            const afterEnd   = afterStart + durM;
+            if ( afterStart >= EARLIEST && afterEnd <= LATEST && ! isSlotBusy( afterStart, afterEnd ) ) {
+                return {
+                    start_time: this._minutesToTime( afterStart ),
+                    end_time:   this._minutesToTime( afterEnd ),
+                };
+            }
+
+            // Thử hướng trước: sEndM - offset
+            const beforeStart = sEndM - offset;
+            const beforeEnd   = beforeStart + durM;
+            if ( beforeStart >= EARLIEST && beforeEnd <= LATEST && ! isSlotBusy( beforeStart, beforeEnd ) ) {
+                return {
+                    start_time: this._minutesToTime( beforeStart ),
+                    end_time:   this._minutesToTime( beforeEnd ),
+                };
+            }
+        }
+
+        return null;
+    },
+
+    /**
+     * Nhân bản buổi học (1-click, tự tìm slot trống, tạo ngay không qua form).
+     *
+     * @param {number} sessionId
+     */
+    async _duplicateSession( sessionId ) {
+        try {
+            const data = await HT.api.call( 'hinteach_session_get', { session_id: sessionId }, 'GET' );
+            const session = data.session;
+            if ( ! session ) {
+                HT.utils.toast( 'Không tìm thấy thông tin buổi học.', 'error' );
+                return;
+            }
+
+            // Tìm slot trống trong ngày
+            const slot = this._findDuplicateSlot( session, this._sessions || [] );
+            if ( ! slot ) {
+                HT.utils.toast( 'Không còn khung giờ trống trong ngày để nhân bản buổi học này.', 'error' );
+                return;
+            }
+
+            const studentIds = ( session.students || [] ).map( s => parseInt( s.student_id, 10 ) );
+
+            const payload = {
+                class_id:         session.class_id,
+                date:             session.date,
+                start_time:       slot.start_time,
+                end_time:         slot.end_time,
+                type:             session.type,
+                student_ids:      studentIds,
+                price:            session.price || 0,
+                session_name:     session.session_name || '',
+                content:          session.content || '',
+                homework_content: session.homework_content || '',
+                general_comment:  session.general_comment || '',
+                display_color:    '', // Buổi nhân bản độc lập, không kế thừa màu
+            };
+
+            await HT.api.call( 'hinteach_session_save', payload );
+            HT.utils.toast( 'Đã nhân bản buổi học thành công.' );
+            await this._render();
+        } catch ( err ) {
+            if ( err.status === 409 && err.serverData?.conflict ) {
+                const c = err.serverData.conflict;
+                const conflictName = c.session_name
+                    ? `"${HT.utils.escapeHtml( c.session_name )}"`
+                    : 'buổi học';
+                const conflictTime = `${this._fmtTime( c.start_time )} – ${this._fmtTime( c.end_time )}`;
+                HT.utils.toast(
+                    `Trùng lịch với ${conflictName} lúc ${conflictTime} ngày ${this._fmtShort( c.date )}.`,
+                    'error'
+                );
+            } else {
+                HT.utils.toast( err.message || 'Không thể nhân bản buổi học.', 'error' );
+            }
+        }
+    },
+
+    /**
+     * Shortcut xoá buổi học từ context menu (tái sử dụng flow M4).
+     *
+     * @param {number} sessionId
+     */
+    async _deleteSessionShortcut( sessionId ) {
+        try {
+            const data = await HT.api.call( 'hinteach_session_get', { session_id: sessionId }, 'GET' );
+            if ( ! data.session ) {
+                HT.utils.toast( 'Không tìm thấy thông tin buổi học.', 'error' );
+                return;
+            }
+            await this._deleteSession( data.session );
+        } catch ( err ) {
+            HT.utils.toast( err.message || 'Lỗi khi chuẩn bị xoá buổi học.', 'error' );
         }
     },
 };

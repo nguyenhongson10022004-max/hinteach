@@ -37,6 +37,7 @@
 | `hinteach_session_save_recurring` | ajax-schedule.php | POST | quyền `scheduler` (assistant) hoặc `manage_hinteach_classes` |
 | `hinteach_session_delete` (scope: `single`/`following`) | ajax-schedule.php | POST | quyền `scheduler` (assistant) hoặc `manage_hinteach_classes` |
 | `hinteach_session_quick_entry` | ajax-schedule.php | POST | quyền `scheduler` (assistant) hoặc `manage_hinteach_classes` — chỉ áp dụng đúng `session_id` đang mở, KHÔNG propagate sang session following (xem `docs/specs/schedule.md` mục 9). Cập nhật `content`/`homework_content`/`session_name`/`general_comment` của session, cập nhật `session_students` (nhật ký per-student), và tạo record trong `wp_hinteach_grades` gắn `session_id` |
+| `hinteach_session_display_color` | ajax-schedule.php | POST | quyền `scheduler` (assistant) hoặc `manage_hinteach_classes` — cập nhật `display_color` cho session (hex hoặc null). Nếu thuộc chuỗi lặp (repeat_group_id), server tự propagate current + following theo tuple `(repeat_group_id, date, start_time, id)` |
 | `hinteach_tuition_get` | ajax-tuition.php | GET | quyền `tuition` (assistant) hoặc `manage_hinteach_classes` |
 | `hinteach_tuition_adjustment_save` | ajax-tuition.php | POST | `manage_hinteach_classes` |
 | `hinteach_billing_payment_confirm` | ajax-tuition.php | POST | `manage_hinteach_classes` — dùng riêng cho `course`/`monthly`, KHÔNG dùng chung hàm với xác nhận thu buổi `session` |

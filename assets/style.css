@@ -1149,3 +1149,181 @@ body.ht-modal-open {
     font-size: 13px;
 }
 
+/* ══════════════════════════════════════════════════════════
+   GĐ3 M6: Context Menu & Color Swatches
+   ══════════════════════════════════════════════════════════ */
+
+.ht-context-menu {
+    position: fixed;
+    z-index: 1000;
+    background: var(--ht-bg-card, #ffffff);
+    border: 1px solid var(--ht-border, #e2e8f0);
+    border-radius: var(--ht-radius, 8px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    min-width: 170px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    user-select: none;
+    animation: ht-fade-in 0.1s ease;
+}
+
+@keyframes ht-fade-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.ht-context-menu__item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border: none;
+    background: none;
+    border-radius: var(--ht-radius-sm, 4px);
+    color: var(--ht-text, #1e293b);
+    font-size: 13px;
+    font-family: var(--ht-font);
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    transition: background var(--ht-transition);
+}
+
+.ht-context-menu__item:hover:not(.ht-context-menu__item--disabled) {
+    background: var(--ht-bg, #f5f6fa);
+    color: var(--ht-primary, #4A90D9);
+}
+
+.ht-context-menu__item--danger:hover:not(.ht-context-menu__item--disabled) {
+    background: #fef2f2;
+    color: var(--ht-danger, #ef4444);
+}
+
+.ht-context-menu__item--disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.ht-context-menu__icon {
+    font-size: 14px;
+    width: 16px;
+    display: inline-flex;
+    justify-content: center;
+}
+
+.ht-context-menu__divider {
+    height: 1px;
+    background: var(--ht-border, #e2e8f0);
+    margin: 3px 0;
+}
+
+/* Color picker panel inside / next to context menu */
+.ht-color-swatches {
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: #f8fafc;
+    border-radius: var(--ht-radius-sm, 4px);
+    margin-bottom: 2px;
+}
+
+.ht-color-swatches__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.ht-color-swatches__title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ht-text-muted, #64748b);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.ht-color-swatches__grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+}
+
+.ht-color-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    padding: 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+
+.ht-color-swatch:hover {
+    transform: scale(1.18);
+    border-color: #ffffff;
+    outline: 2px solid var(--ht-primary, #4A90D9);
+}
+
+.ht-color-swatches__actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 2px;
+}
+
+.ht-color-action-btn {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 5px 6px;
+    border: 1px solid var(--ht-border, #cbd5e1);
+    background: #ffffff;
+    border-radius: var(--ht-radius-sm, 4px);
+    font-size: 11.5px;
+    font-weight: 500;
+    font-family: var(--ht-font);
+    color: var(--ht-text, #334155);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: all var(--ht-transition);
+    user-select: none;
+    text-decoration: none;
+}
+
+.ht-color-action-btn:hover {
+    background: var(--ht-bg, #f1f5f9);
+    border-color: var(--ht-primary, #4A90D9);
+    color: var(--ht-primary, #4A90D9);
+}
+
+.ht-color-action-btn--custom {
+    cursor: pointer;
+}
+
+.ht-color-action-input {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    border: none;
+    padding: 0;
+}
+
+.ht-color-action-btn__icon {
+    font-size: 12px;
+    line-height: 1;
+}
+
+.ht-color-action-btn__text {
+    font-size: 11px;
+    white-space: nowrap;
+}
+
