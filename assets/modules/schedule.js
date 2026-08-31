@@ -1,8 +1,13 @@
 /**
  * HinTeach — Module: Thời khoá biểu (schedule)
  *
- * M1 — READ ONLY. Không có create/edit/delete/recurrence/quick-entry.
- * Gọi API hinteach_session_list để đọc sessions trong khoảng tuần đang xem.
+ * M1  — Calendar shell + session list (read-only)
+ * M2  — Create single session
+ * M3  — Recurrence
+ * M4  — Edit/Delete recurrence
+ * M5  — Quick entry / session record / score
+ * M6  — Calendar actions (context menu, copy/paste, duplicate, display color)
+ * M7  — Calendar interaction (drag create, drag move)
  *
  * Shape: export default { async render(container) } — giống classes.js / students.js.
  * Không dùng thư viện ngoài. Không tự tạo state/framework riêng.
@@ -11,6 +16,18 @@
  */
 
 const ScheduleModule = {
+
+    // ── M7 Time-grid constants ─────────────────────────────────
+    /** Pixel height cho mỗi giờ trong time-grid */
+    HOUR_HEIGHT: 48,
+    /** Giờ bắt đầu hiển thị (07:00) */
+    DAY_START_HOUR: 7,
+    /** Giờ kết thúc hiển thị (24:00) */
+    DAY_END_HOUR: 24,
+    /** Snap đơn vị phút khi kéo */
+    SNAP_MINUTES: 30,
+    /** Threshold pixel trước khi coi là drag (không phải click) */
+    DRAG_THRESHOLD: 6,
 
     /** Ngày bất kỳ trong tuần đang xem — state nội bộ */
     _currentDate: new Date(),
@@ -23,6 +40,9 @@ const ScheduleModule = {
 
     /** Reference context menu element đang mở */
     _contextMenuEl: null,
+
+    /** Flag suppress click sau khi drag move xong */
+    _dragClickSuppressed: false,
 
     // ──────────────────────────────────────────────────────────
     // Entry point — gọi bởi HT.router.navigate('schedule')
@@ -74,32 +94,34 @@ const ScheduleModule = {
             this._sessions = sessions;
             cal.innerHTML = this._buildCalendarHtml( week, sessions );
             this._bindNavEvents();
-            this._bindSessionEvents();
-            this._bindCalendarAreaEvents();
+            this._bindSessionEvents();       // M4 click/contextmenu + M7 drag move
+            this._bindCalendarAreaEvents();  // M6 contextmenu vùng trống + M7 drag create
         } catch ( err ) {
             cal.innerHTML = `<div class="ht-error"><p>Lỗi tải lịch: ${HT.utils.escapeHtml(err.message)}</p></div>`;
         }
     },
 
     /**
-     * Build toàn bộ HTML calendar tuần.
+     * Build toàn bộ HTML calendar tuần — M7: time-grid layout.
      *
      * @param {{ from: Date, to: Date, fromStr: string, toStr: string }} week
      * @param {Array} sessions
      * @returns {string} HTML string
      */
     _buildCalendarHtml( week, sessions ) {
-        const DAY_LABELS = [ 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN' ];
-        const today      = this._toIso( new Date() );
+        const DAY_LABELS  = [ 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN' ];
+        const today       = this._toIso( new Date() );
+        const totalHours  = this.DAY_END_HOUR - this.DAY_START_HOUR;
+        const gridHeight  = totalHours * this.HOUR_HEIGHT;
 
-        // Nhóm session theo ngày (isoDate → session[])
+        // Nhóm session theo ngày
         const byDay = {};
         for ( const s of sessions ) {
             if ( ! byDay[ s.date ] ) byDay[ s.date ] = [];
             byDay[ s.date ].push( s );
         }
 
-        // Mảng 7 ngày T2..CN bắt đầu từ week.from
+        // Mảng 7 ngày T2..CN
         const days = [];
         for ( let i = 0; i < 7; i++ ) {
             const d = new Date( week.from );
@@ -107,9 +129,26 @@ const ScheduleModule = {
             days.push( this._toIso( d ) );
         }
 
-        // Label header: "25/08 – 31/08/2026"
+        // Label header
         const headerLabel = `${this._fmtShort( week.fromStr )} – ${this._fmtShort( week.toStr )}/${week.toStr.slice( 0, 4 )}`;
 
+        // Hour rows HTML — dùng chung cho mọi cột ngày
+        let hourRowsHtml = '';
+        for ( let h = this.DAY_START_HOUR; h <= this.DAY_END_HOUR; h++ ) {
+            const top  = ( h - this.DAY_START_HOUR ) * this.HOUR_HEIGHT;
+            const cls  = h % 1 === 0 ? 'ht-cal__hour-row ht-cal__hour-row--full' : 'ht-cal__hour-row';
+            hourRowsHtml += `<div class="${cls}" style="top:${top}px;"></div>`;
+        }
+
+        // Time gutter (cột trục giờ bên trái)
+        let gutterHtml = '<div class="ht-cal__time-gutter"><div class="ht-cal__time-gutter-header"></div><div class="ht-cal__time-gutter-body" style="height:' + gridHeight + 'px;">';
+        for ( let h = this.DAY_START_HOUR; h <= this.DAY_END_HOUR; h++ ) {
+            const top = ( h - this.DAY_START_HOUR ) * this.HOUR_HEIGHT;
+            gutterHtml += `<span class="ht-cal__hour-label" style="top:${top}px;">${String(h).padStart(2,'0')}:00</span>`;
+        }
+        gutterHtml += '</div></div>';
+
+        // Cột ngày
         const colsHtml = days.map( ( isoDate, i ) => {
             const isToday = isoDate === today;
             const blocks  = ( byDay[ isoDate ] || [] )
@@ -122,7 +161,8 @@ const ScheduleModule = {
                         <span class="ht-cal__day-name">${DAY_LABELS[ i ]}</span>
                         <span class="ht-cal__day-date">${this._fmtShort( isoDate )}</span>
                     </div>
-                    <div class="ht-cal__day-body" data-date="${isoDate}">
+                    <div class="ht-cal__day-body" data-date="${isoDate}" style="height:${gridHeight}px;">
+                        ${hourRowsHtml}
                         ${blocks}
                     </div>
                 </div>
@@ -136,15 +176,15 @@ const ScheduleModule = {
                 <button type="button" class="ht-btn ht-btn--ghost" id="ht-cal-next">Tuần sau →</button>
             </div>
             <div class="ht-cal__grid">
+                ${gutterHtml}
                 ${colsHtml}
             </div>
         `;
     },
 
     /**
-     * Render 1 session block trong ô ngày.
+     * Render 1 session block — M7: absolute position theo start_time/end_time.
      * display_color ưu tiên; fallback về class_color.
-     * Không có click handler trong M1.
      *
      * @param {Object} s  Session object
      * @returns {string} HTML string
@@ -156,8 +196,15 @@ const ScheduleModule = {
         const timeStr  = this._fmtTime( s.start_time ) +
                          ( s.end_time ? ' – ' + this._fmtTime( s.end_time ) : '' );
 
+        // Tính top/height từ start_time/end_time
+        const startM = this._timeToMinutes( s.start_time );
+        const endM   = this._timeToMinutes( s.end_time || s.start_time );
+        const dayStartM = this.DAY_START_HOUR * 60;
+        const top    = Math.max( 0, ( startM - dayStartM ) / 60 * this.HOUR_HEIGHT );
+        const height = Math.max( 20, ( endM - startM ) / 60 * this.HOUR_HEIGHT );
+
         return `
-            <div class="ht-session-block" data-id="${s.id}" style="border-left:3px solid ${color};">
+            <div class="ht-session-block" data-id="${s.id}" style="border-left:3px solid ${color}; top:${top}px; height:${height}px;">
                 <div class="ht-session-block__name">${name}</div>
                 ${sessName ? `<div class="ht-session-block__title">${sessName}</div>` : ''}
                 <div class="ht-session-block__time">${HT.utils.escapeHtml( timeStr )}</div>
@@ -165,10 +212,17 @@ const ScheduleModule = {
         `;
     },
 
-    /** Bind click & contextmenu sự kiện trên các session block */
+    /**
+     * Bind click, contextmenu, và M7 drag-move trên các session block.
+     * click → edit form (M4) — suppressed nếu vừa drag xong.
+     * contextmenu → session context menu (M6).
+     * pointerdown → bắt đầu drag-move tracking (M7).
+     */
     _bindSessionEvents() {
         document.querySelectorAll( '.ht-session-block[data-id]' ).forEach( el => {
-            el.addEventListener( 'click', () => {
+            el.addEventListener( 'click', ( e ) => {
+                // Suppress click nếu vừa hoàn thành drag move
+                if ( this._dragClickSuppressed ) return;
                 const id = parseInt( el.dataset.id, 10 );
                 if ( id ) this._openEditForm( id );
             } );
@@ -178,19 +232,34 @@ const ScheduleModule = {
                 const id = parseInt( el.dataset.id, 10 );
                 if ( id ) this._showSessionContextMenu( e, id );
             } );
+            // M7: Drag Move — pointerdown
+            el.addEventListener( 'pointerdown', ( e ) => {
+                // Chỉ main button (left click)
+                if ( e.button !== 0 ) return;
+                const id = parseInt( el.dataset.id, 10 );
+                if ( id ) this._onSessionPointerDown( e, el, id );
+            } );
         } );
     },
 
-    /** Bind contextmenu sự kiện trên vùng lịch trống */
+    /**
+     * Bind contextmenu (M6) và drag-create pointerdown (M7) trên vùng lịch trống.
+     */
     _bindCalendarAreaEvents() {
         document.querySelectorAll( '.ht-cal__day-body[data-date]' ).forEach( el => {
             el.addEventListener( 'contextmenu', ( e ) => {
-                // Chỉ mở khi click vào vùng trống (không phải trên session block)
                 if ( e.target.closest( '.ht-session-block' ) ) return;
                 e.preventDefault();
                 e.stopPropagation();
                 const date = el.dataset.date;
                 if ( date ) this._showEmptyContextMenu( e, date );
+            } );
+            // M7: Drag Create — pointerdown trên vùng trống
+            el.addEventListener( 'pointerdown', ( e ) => {
+                if ( e.button !== 0 ) return;
+                if ( e.target.closest( '.ht-session-block' ) ) return;
+                const date = el.dataset.date;
+                if ( date ) this._onCreatePointerDown( e, el, date );
             } );
         } );
     },
@@ -286,7 +355,10 @@ const ScheduleModule = {
     /**
      * Mở form tạo buổi học mới.
      * Load danh sách lớp, hiển modal, bind events.
-     * Hỗ trợ prefill khi Dán buổi học (Paste).
+     * Hỗ trợ prefill khi Dán buổi học (Paste — M6)
+     * hoặc khi kéo tạo buổi (Drag Create — M7).
+     *
+     * M7: prefill có thể chứa { date, start_time, end_time } từ vùng kéo.
      *
      * @param {Object|null} prefill
      */
@@ -2110,6 +2182,326 @@ const ScheduleModule = {
         } catch ( err ) {
             HT.utils.toast( err.message || 'Lỗi khi chuẩn bị xoá buổi học.', 'error' );
         }
+    },
+
+    // ──────────────────────────────────────────────────────────
+    // M7: Time-grid pixel helpers
+    // ──────────────────────────────────────────────────────────
+
+    /**
+     * Chuyển pixel Y (relative to day-body top) thành số phút từ 00:00.
+     * @param {number} px
+     * @returns {number}
+     */
+    _pxToMinutes( px ) {
+        return ( px / this.HOUR_HEIGHT ) * 60 + this.DAY_START_HOUR * 60;
+    },
+
+    /**
+     * Snap số phút về bội số gần nhất của SNAP_MINUTES.
+     * @param {number} mins
+     * @returns {number}
+     */
+    _snapMinutes( mins ) {
+        return Math.round( mins / this.SNAP_MINUTES ) * this.SNAP_MINUTES;
+    },
+
+    /**
+     * Chuyển số phút thành pixel Y (relative to day-body top).
+     * @param {number} mins  phút từ 00:00
+     * @returns {number}
+     */
+    _minutesToPx( mins ) {
+        return ( mins - this.DAY_START_HOUR * 60 ) / 60 * this.HOUR_HEIGHT;
+    },
+
+    /**
+     * Chuyển chuỗi 'HH:MM' hoặc 'HH:MM:SS' thành số phút từ 00:00.
+     * Dùng bởi _renderSessionBlock() để tính top/height cho session block.
+     * @param {string} timeStr
+     * @returns {number}
+     */
+    _timeToMinutes( timeStr ) {
+        if ( ! timeStr ) return 0;
+        const parts = timeStr.split( ':' );
+        return parseInt( parts[ 0 ], 10 ) * 60 + ( parseInt( parts[ 1 ], 10 ) || 0 );
+    },
+
+    /**
+     * Chuyển số phút từ 00:00 thành chuỗi 'HH:MM'.
+     * Dùng bởi drag-create preview và drag-move ghost label.
+     * @param {number} mins
+     * @returns {string}
+     */
+    _minutesToTime( mins ) {
+        const h = Math.floor( mins / 60 );
+        const m = mins % 60;
+        return `${String( h ).padStart( 2, '0' )}:${String( m ).padStart( 2, '0' )}`;
+    },
+
+    // ──────────────────────────────────────────────────────────
+    // M7: Phase 2 — Drag Create
+    // ──────────────────────────────────────────────────────────
+
+    /**
+     * Xử lý pointerdown trên vùng lịch trống — bắt đầu Drag Create.
+     *
+     * @param {PointerEvent} e
+     * @param {HTMLElement}  dayBody  .ht-cal__day-body element
+     * @param {string}       date     YYYY-MM-DD
+     */
+    _onCreatePointerDown( e, dayBody, date ) {
+        e.preventDefault();
+
+        const rect      = dayBody.getBoundingClientRect();
+        const startY    = e.clientY - rect.top;
+        const startMins = this._snapMinutes( this._pxToMinutes( startY ) );
+
+        let preview    = null;
+        let isDragging = false;
+        let endMins    = startMins + this.SNAP_MINUTES;
+
+        const onMove = ( ev ) => {
+            const curY    = ev.clientY - rect.top;
+            const curMins = this._snapMinutes( this._pxToMinutes( curY ) );
+            const rawDiff = Math.abs( ev.clientY - e.clientY );
+
+            if ( ! isDragging && rawDiff < this.DRAG_THRESHOLD ) return;
+            isDragging = true;
+
+            endMins = curMins > startMins ? curMins : startMins + this.SNAP_MINUTES;
+
+            if ( ! preview ) {
+                preview = document.createElement( 'div' );
+                preview.className = 'ht-drag-preview';
+                dayBody.appendChild( preview );
+            }
+            const topPx    = this._minutesToPx( startMins );
+            const heightPx = this._minutesToPx( endMins ) - topPx;
+            preview.style.top    = `${topPx}px`;
+            preview.style.height = `${Math.max( 8, heightPx )}px`;
+            preview.innerHTML    = `<span class="ht-drag-preview__label">${this._minutesToTime( startMins )} \u2013 ${this._minutesToTime( endMins )}</span>`;
+        };
+
+        const onUp = () => {
+            document.removeEventListener( 'pointermove', onMove );
+            document.removeEventListener( 'pointerup', onUp );
+
+            if ( preview ) { preview.remove(); preview = null; }
+            if ( ! isDragging ) return;
+
+            // Clamp và đảm bảo tối thiểu SNAP_MINUTES
+            const dayEndMins = this.DAY_END_HOUR * 60;
+            if ( endMins - startMins < this.SNAP_MINUTES ) endMins = startMins + this.SNAP_MINUTES;
+            if ( endMins > dayEndMins ) endMins = dayEndMins;
+            if ( startMins >= dayEndMins ) return;
+
+            this._openCreateForm( {
+                date:       date,
+                start_time: this._minutesToTime( startMins ),
+                end_time:   this._minutesToTime( endMins ),
+            } );
+        };
+
+        document.addEventListener( 'pointermove', onMove );
+        document.addEventListener( 'pointerup', onUp );
+    },
+
+    // ──────────────────────────────────────────────────────────
+    // M7: Phase 3 — Drag Move
+    // ──────────────────────────────────────────────────────────
+
+    /**
+     * Xử lý pointerdown trên session block — bắt đầu Drag Move.
+     *
+     * @param {PointerEvent} e
+     * @param {HTMLElement}  el         .ht-session-block element
+     * @param {number}       sessionId
+     */
+    _onSessionPointerDown( e, el, sessionId ) {
+        if ( e.target.closest( '.ht-context-menu' ) ) return;
+
+        const origSession = this._sessions.find( s => Number( s.id ) === sessionId );
+        if ( ! origSession ) return;
+
+        const origDate  = origSession.date;
+        const origStart = origSession.start_time ? origSession.start_time.slice( 0, 5 ) : '';
+        const origEnd   = origSession.end_time   ? origSession.end_time.slice( 0, 5 )   : '';
+
+        const startX = e.clientX;
+        const startY = e.clientY;
+        let isDragging = false;
+        let ghost      = null;
+
+        let newDate  = origDate;
+        let newStart = origStart;
+        let newEnd   = origEnd;
+
+        const onMove = ( ev ) => {
+            const dx = ev.clientX - startX;
+            const dy = ev.clientY - startY;
+
+            if ( ! isDragging && ( Math.abs( dx ) < this.DRAG_THRESHOLD && Math.abs( dy ) < this.DRAG_THRESHOLD ) ) return;
+
+            if ( ! isDragging ) {
+                isDragging = true;
+                el.classList.add( 'ht-session-block--dragging' );
+
+                ghost = document.createElement( 'div' );
+                ghost.className = 'ht-drag-ghost';
+                ghost.textContent = origSession.class_name || 'Buổi học';
+                document.body.appendChild( ghost );
+            }
+
+            if ( ghost ) {
+                ghost.style.left = `${ev.clientX}px`;
+                ghost.style.top  = `${ev.clientY}px`;
+            }
+
+            // Xác định day-body phía dưới con trỏ (tạm ẩn ghost)
+            if ( ghost ) ghost.style.display = 'none';
+            const targetEl = document.elementFromPoint( ev.clientX, ev.clientY );
+            if ( ghost ) ghost.style.display = '';
+
+            if ( ! targetEl ) return;
+            const dayBody = targetEl.closest( '.ht-cal__day-body[data-date]' );
+            if ( ! dayBody ) return;
+
+            newDate = dayBody.dataset.date;
+
+            const rect     = dayBody.getBoundingClientRect();
+            const relY     = ev.clientY - rect.top;
+            const snapMins = this._snapMinutes( this._pxToMinutes( relY ) );
+
+            // Giữ nguyên duration
+            const origStartM = this._timeToMinutes( origStart );
+            const origEndM   = this._timeToMinutes( origEnd );
+            const durM       = Math.max( this.SNAP_MINUTES, origEndM - origStartM );
+
+            let newStartM = snapMins;
+            let newEndM   = newStartM + durM;
+
+            // Clamp
+            const dayEndM   = this.DAY_END_HOUR * 60;
+            const dayStartM = this.DAY_START_HOUR * 60;
+            if ( newEndM > dayEndM ) {
+                newEndM   = dayEndM;
+                newStartM = newEndM - durM;
+            }
+            if ( newStartM < dayStartM ) {
+                newStartM = dayStartM;
+                newEndM   = newStartM + durM;
+            }
+
+            newStart = this._minutesToTime( newStartM );
+            newEnd   = this._minutesToTime( newEndM );
+
+            if ( ghost ) ghost.textContent = `${origSession.class_name || 'Buổi học'} ${newStart}\u2013${newEnd}`;
+        };
+
+        const onUp = async () => {
+            document.removeEventListener( 'pointermove', onMove );
+            document.removeEventListener( 'pointerup', onUp );
+
+            el.classList.remove( 'ht-session-block--dragging' );
+            if ( ghost ) { ghost.remove(); ghost = null; }
+
+            if ( ! isDragging ) return;
+
+            // Click-suppression: ngăn click event bắn theo sau pointerup
+            this._dragClickSuppressed = true;
+            setTimeout( () => { this._dragClickSuppressed = false; }, 300 );
+
+            // No-op nếu không đổi vị trí
+            if ( newDate === origDate && newStart === origStart && newEnd === origEnd ) return;
+
+            await this._executeDragMove( sessionId, newDate, newStart, newEnd );
+        };
+
+        document.addEventListener( 'pointermove', onMove );
+        document.addEventListener( 'pointerup', onUp );
+    },
+
+    /**
+     * Thực thi Drag Move: fetch full session → scope check → API update → _render().
+     * Implements M7-2 (scope), M7-3 (server 409), M7-4 (rollback via _render).
+     *
+     * @param {number} sessionId
+     * @param {string} newDate    YYYY-MM-DD
+     * @param {string} newStart   HH:MM
+     * @param {string} newEnd     HH:MM
+     */
+    async _executeDragMove( sessionId, newDate, newStart, newEnd ) {
+        let session;
+        try {
+            const data = await HT.api.call( 'hinteach_session_get', { session_id: sessionId }, 'GET' );
+            session = data.session;
+            if ( ! session ) {
+                HT.utils.toast( 'Không tìm thấy thông tin buổi học.', 'error' );
+                await this._render();
+                return;
+            }
+        } catch ( err ) {
+            HT.utils.toast( 'Lỗi tải thông tin buổi học: ' + err.message, 'error' );
+            await this._render();
+            return;
+        }
+
+        // M7-2: hỏi scope nếu thuộc chuỗi lặp và có following
+        let updateScope = 'single';
+        if ( session.repeat_group_id && session.following_count > 0 ) {
+            updateScope = await this._askScope( 'di chuyển', session.following_count );
+            if ( ! updateScope ) {
+                // User cancel → abort, render lại về chỗ cũ
+                await this._render();
+                return;
+            }
+        }
+
+        const studentIds = ( session.students || [] ).map( s => parseInt( s.student_id, 10 ) );
+        const payload = {
+            session_id:       session.id,
+            update_scope:     updateScope,
+            class_id:         session.class_id,
+            date:             newDate,
+            start_time:       newStart,
+            end_time:         newEnd,
+            type:             session.type,
+            student_ids:      studentIds,
+            price:            session.price || 0,
+            session_name:     session.session_name || '',
+            content:          session.content || '',
+            homework_content: session.homework_content || '',
+            general_comment:  session.general_comment || '',
+            display_color:    session.display_color || '',
+        };
+
+        try {
+            const result = await HT.api.call( 'hinteach_session_save', payload );
+            if ( updateScope === 'following' && result.updated_count ) {
+                HT.utils.toast( `Đã di chuyển ${result.updated_count} buổi trong chuỗi lặp.` );
+            } else {
+                HT.utils.toast( 'Đã di chuyển buổi học thành công.' );
+            }
+        } catch ( err ) {
+            // M7-3: server 409 là source of truth
+            if ( err.status === 409 && err.serverData?.conflict ) {
+                const c = err.serverData.conflict;
+                const conflictName = c.session_name
+                    ? `"${HT.utils.escapeHtml( c.session_name )}"`
+                    : 'buổi học';
+                const conflictTime = `${this._fmtTime( c.start_time )} \u2013 ${this._fmtTime( c.end_time )}`;
+                HT.utils.toast(
+                    `Trùng lịch với ${conflictName} lúc ${conflictTime} ngày ${this._fmtShort( c.date )}.`,
+                    'error'
+                );
+            } else {
+                HT.utils.toast( err.message || 'Không thể di chuyển buổi học.', 'error' );
+            }
+        }
+
+        // M7-4: luôn _render() sau API call để đồng bộ UI với server
+        await this._render();
     },
 };
 

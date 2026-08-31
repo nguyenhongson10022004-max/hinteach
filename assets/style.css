@@ -856,7 +856,7 @@ body.ht-modal-open {
 }
 
 /* ══════════════════════════════════════════════════════════
-   M4: Schedule Interaction & Scope Selection
+   M4/M7: Schedule Calendar + Time-Grid + Drag Interaction
    ══════════════════════════════════════════════════════════ */
 
 .ht-cal__nav {
@@ -871,21 +871,54 @@ body.ht-modal-open {
     font-size: 16px;
 }
 
+/* Grid: cột giờ bên trái + 7 ngày */
 .ht-cal__grid {
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 8px;
+    grid-template-columns: 40px repeat(7, 1fr);
+    gap: 0;
     background: var(--ht-border);
     border: 1px solid var(--ht-border);
     border-radius: var(--ht-radius);
     overflow: hidden;
 }
 
-.ht-cal__col {
-    background: var(--ht-bg-card);
-    min-height: 280px;
+/* Cột trục giờ bên trái */
+.ht-cal__time-gutter {
+    background: #f8fafc;
+    border-right: 1px solid var(--ht-border);
     display: flex;
     flex-direction: column;
+}
+
+.ht-cal__time-gutter-header {
+    height: 48px;
+    border-bottom: 1px solid var(--ht-border);
+    flex-shrink: 0;
+}
+
+.ht-cal__time-gutter-body {
+    flex: 1;
+    position: relative;
+}
+
+.ht-cal__hour-label {
+    position: absolute;
+    right: 4px;
+    font-size: 10px;
+    color: var(--ht-text-muted);
+    line-height: 1;
+    transform: translateY(-50%);
+    white-space: nowrap;
+    pointer-events: none;
+    user-select: none;
+}
+
+/* Cột ngày */
+.ht-cal__col {
+    background: var(--ht-bg-card);
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--ht-border);
 }
 
 .ht-cal__col--today {
@@ -897,6 +930,13 @@ body.ht-modal-open {
     text-align: center;
     border-bottom: 1px solid var(--ht-border);
     background: #f8fafc;
+    height: 48px;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }
 
 .ht-cal__col--today .ht-cal__day-header {
@@ -916,30 +956,57 @@ body.ht-modal-open {
     font-weight: 600;
 }
 
+/* Body ngày — container định vị tuyệt đối cho session block */
 .ht-cal__day-body {
-    padding: 6px;
+    position: relative;
     flex: 1;
-    overflow-y: auto;
+    overflow: hidden;
+    cursor: crosshair;
 }
 
+/* Hour row lines (background) */
+.ht-cal__hour-row {
+    position: absolute;
+    left: 0;
+    right: 0;
+    border-top: 1px solid #f1f5f9;
+    pointer-events: none;
+}
+
+.ht-cal__hour-row--full {
+    border-top-color: #e2e8f0;
+}
+
+/* Session block — positioned absolute trong day-body */
 .ht-session-block {
+    position: absolute;
+    left: 2px;
+    right: 2px;
     background: #fff;
     border-radius: var(--ht-radius-sm);
-    padding: 6px 8px;
-    margin-bottom: 6px;
+    padding: 4px 6px;
     box-shadow: var(--ht-shadow);
-    cursor: pointer;
-    transition: transform var(--ht-transition), box-shadow var(--ht-transition);
+    cursor: grab;
+    overflow: hidden;
+    transition: box-shadow var(--ht-transition), opacity var(--ht-transition);
+    box-sizing: border-box;
+    min-height: 20px;
+    user-select: none;
 }
 
 .ht-session-block:hover {
-    transform: translateY(-1px);
     box-shadow: var(--ht-shadow-md);
+    z-index: 2;
+}
+
+.ht-session-block--dragging {
+    opacity: 0.35;
+    cursor: grabbing;
 }
 
 .ht-session-block__name {
     font-weight: 600;
-    font-size: 12px;
+    font-size: 11px;
     color: var(--ht-text);
     white-space: nowrap;
     overflow: hidden;
@@ -947,7 +1014,7 @@ body.ht-modal-open {
 }
 
 .ht-session-block__title {
-    font-size: 11px;
+    font-size: 10px;
     color: var(--ht-text-muted);
     white-space: nowrap;
     overflow: hidden;
@@ -955,9 +1022,50 @@ body.ht-modal-open {
 }
 
 .ht-session-block__time {
-    font-size: 11px;
+    font-size: 10px;
     color: var(--ht-text-muted);
-    margin-top: 2px;
+    margin-top: 1px;
+}
+
+/* Ghost element kéo theo chuột khi Drag Move */
+.ht-drag-ghost {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.85;
+    border-radius: var(--ht-radius-sm);
+    padding: 4px 8px;
+    background: var(--ht-primary, #2563eb);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    min-width: 80px;
+    white-space: nowrap;
+    transform: translate(-50%, -50%);
+}
+
+/* Preview vùng kéo khi Drag Create */
+.ht-drag-preview {
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    background: rgba(37, 99, 235, 0.15);
+    border: 1.5px dashed var(--ht-primary, #2563eb);
+    border-radius: var(--ht-radius-sm);
+    pointer-events: none;
+    z-index: 5;
+    box-sizing: border-box;
+}
+
+.ht-drag-preview__label {
+    position: absolute;
+    bottom: 2px;
+    left: 4px;
+    font-size: 10px;
+    color: var(--ht-primary, #2563eb);
+    font-weight: 600;
+    pointer-events: none;
 }
 
 .ht-scope-choices {
