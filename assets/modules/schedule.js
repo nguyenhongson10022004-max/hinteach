@@ -2550,6 +2550,10 @@ const ScheduleModule = {
             homework_content: session.homework_content || '',
             general_comment: session.general_comment || '',
             display_color: session.display_color || '',
+            // M8: explicit discriminator — drag_move=true distinguishes this from Edit Form.
+            // Backend uses this flag ONLY when update_scope="following" to apply delta semantics.
+            // Edit Form submit handler does NOT include this field.
+            drag_move: true,
         };
 
         try {

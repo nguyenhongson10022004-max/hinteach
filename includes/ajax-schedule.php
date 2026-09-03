@@ -587,6 +587,13 @@ function hinteach_ajax_session_update( $session_id, $access ) {
     $display_color    = isset( $_POST['display_color'] ) ? sanitize_text_field( wp_unslash( $_POST['display_color'] ) ) : '';
     $update_scope     = isset( $_POST['update_scope'] ) ? sanitize_text_field( wp_unslash( $_POST['update_scope'] ) ) : 'single';
 
+    // M8: drag_move discriminator — true only when explicitly sent as string 'true' by _executeDragMove().
+    // FormData serializes JS boolean true as the string 'true' via ToString(value).
+    // Uses standard WordPress input sanitization: wp_unslash() + sanitize_text_field().
+    // Strict whitelist: ONLY the exact string 'true'. Absent, empty, or any other value evaluates to false.
+    $drag_move_raw = isset( $_POST['drag_move'] ) ? sanitize_text_field( wp_unslash( $_POST['drag_move'] ) ) : '';
+    $is_drag_move  = ( 'true' === $drag_move_raw );
+
     // student_ids — mảng từ FormData
     $student_ids_raw = isset( $_POST['student_ids'] ) && is_array( $_POST['student_ids'] )
         ? $_POST['student_ids']
@@ -823,66 +830,236 @@ function hinteach_ajax_session_update( $session_id, $access ) {
         wp_send_json_error( array( 'message' => 'Không tìm thấy buổi nào để cập nhật.' ), 400 );
     }
 
-    // Bước 2: [HINTEACH DESIGN DECISION — D7/D8] Conflict check cho TOÀN BỘ tập target
-    // Mỗi buổi giữ nguyên date riêng (HAR 08), chỉ đổi start_time/end_time
-    $schedule_changed = ( $start_time !== substr( $session->start_time, 0, 5 )
-        || $end_time !== substr( $session->end_time, 0, 5 ) );
+    $target_ids_str = implode( ',', $target_ids );
 
-    if ( $schedule_changed ) {
-        // Load ngày riêng của từng buổi trong tập target
-        $target_ids_str   = implode( ',', $target_ids );
-        $target_dates_raw = $wpdb->get_results(
-            "SELECT id, date FROM {$s_table} WHERE id IN ({$target_ids_str})"
-        );
+    // ══════════════════════════════════════════════════════════
+    // PATH B — FOLLOWING + NON-DRAG (M4 absolute semantics)
+    // ══════════════════════════════════════════════════════════
+    // Giữ nguyên hoàn toàn behavior M4: áp dụng cùng absolute start_time/end_time
+    // cho tất cả frozen target sessions. Mỗi session giữ date riêng của nó.
+    // [HINTEACH DESIGN DECISION — D7/D8] HAR 08 confirmed: date unchanged for following.
+    if ( ! $is_drag_move ) {
 
-        foreach ( $target_dates_raw as $td ) {
-            $conflict = $wpdb->get_row( $wpdb->prepare(
-                "SELECT s.id, s.date, s.start_time, s.end_time, s.session_name
-                 FROM {$s_table} s
-                 JOIN {$c_table} c ON s.class_id = c.id AND c.deleted_at IS NULL
-                 WHERE c.teacher_id = %d
-                   AND s.date = %s
-                   AND s.start_time < %s
-                   AND s.end_time > %s
-                   AND s.deleted_at IS NULL
-                   AND s.id NOT IN ({$target_ids_str})
-                 LIMIT 1",
-                $teacher_id_for_conflict,
-                $td->date,
-                $end_time,
-                $start_time
-            ) );
+        $schedule_changed = ( $start_time !== substr( $session->start_time, 0, 5 )
+            || $end_time !== substr( $session->end_time, 0, 5 ) );
 
-            if ( $conflict ) {
-                wp_send_json_error( array(
-                    'message'  => 'Buổi học bị trùng lịch.',
-                    'conflict' => array(
-                        'id'           => (int) $conflict->id,
-                        'date'         => $conflict->date,
-                        'start_time'   => $conflict->start_time,
-                        'end_time'     => $conflict->end_time,
-                        'session_name' => $conflict->session_name,
-                    ),
-                ), 409 );
+        if ( $schedule_changed ) {
+            // Load ngày riêng của từng buổi trong tập target
+            $target_dates_raw = $wpdb->get_results(
+                "SELECT id, date FROM {$s_table} WHERE id IN ({$target_ids_str})"
+            );
+
+            foreach ( $target_dates_raw as $td ) {
+                $conflict = $wpdb->get_row( $wpdb->prepare(
+                    "SELECT s.id, s.date, s.start_time, s.end_time, s.session_name
+                     FROM {$s_table} s
+                     JOIN {$c_table} c ON s.class_id = c.id AND c.deleted_at IS NULL
+                     WHERE c.teacher_id = %d
+                       AND s.date = %s
+                       AND s.start_time < %s
+                       AND s.end_time > %s
+                       AND s.deleted_at IS NULL
+                       AND s.id NOT IN ({$target_ids_str})
+                     LIMIT 1",
+                    $teacher_id_for_conflict,
+                    $td->date,
+                    $end_time,
+                    $start_time
+                ) );
+
+                if ( $conflict ) {
+                    wp_send_json_error( array(
+                        'message'  => 'Buổi học bị trùng lịch.',
+                        'conflict' => array(
+                            'id'           => (int) $conflict->id,
+                            'date'         => $conflict->date,
+                            'start_time'   => $conflict->start_time,
+                            'end_time'     => $conflict->end_time,
+                            'session_name' => $conflict->session_name,
+                        ),
+                    ), 409 );
+                }
             }
+        }
+
+        // UPDATE toàn bộ tập target — KHÔNG update date (mỗi buổi giữ ngày riêng)
+        $wpdb->query( 'START TRANSACTION' );
+
+        $updated_count = 0;
+        foreach ( $target_ids as $tid ) {
+            $ok = $wpdb->update( $s_table, $update_data, array( 'id' => $tid ), $update_format, array( '%d' ) );
+            if ( false === $ok ) {
+                $wpdb->query( 'ROLLBACK' );
+                wp_send_json_error( array( 'message' => 'Không thể cập nhật buổi học ID ' . $tid . '. Vui lòng thử lại.' ), 500 );
+            }
+            $updated_count++;
+
+            // Đồng bộ session_students cho từng buổi trong tập
+            hinteach_sync_session_students( $tid, $student_ids, $now );
+        }
+
+        $wpdb->query( 'COMMIT' );
+
+        wp_send_json_success( array(
+            'id'            => $session_id,
+            'updated_count' => $updated_count,
+            'scope'         => 'following',
+            'message'       => 'Đã cập nhật ' . $updated_count . ' buổi trong chuỗi lặp.',
+        ) );
+    } // end PATH B
+
+    // ══════════════════════════════════════════════════════════
+    // PATH C — FOLLOWING + DRAG (M8 delta semantics)
+    // ══════════════════════════════════════════════════════════
+    // [HINTEACH DESIGN DECISION — M8: drag_move following delta]
+    // Mỗi session trong frozen target set được dịch chuyển theo CÙNG
+    // movement delta (date_delta + time_delta) từ OLD state của chính session đó.
+    // Điều này bảo toàn relative scheduling giữa các session.
+
+    // ── Tính movement delta ───────────────────────────────────
+    // Date delta: số ngày chênh lệch có dấu (new_target_date − old_target_date)
+    $old_date_obj = new DateTime( $session->date );
+    $new_date_obj = new DateTime( $date );
+    $date_diff    = $old_date_obj->diff( $new_date_obj );
+    $date_delta   = (int) $date_diff->days * ( $new_date_obj > $old_date_obj ? 1 : -1 );
+
+    // Time delta: số phút chênh lệch có dấu (new_target_start − old_target_start)
+    $old_start_parts = explode( ':', substr( $session->start_time, 0, 5 ) );
+    $old_end_parts   = explode( ':', substr( $session->end_time, 0, 5 ) );
+    $new_start_parts = explode( ':', $start_time );
+    $old_start_mins  = (int) $old_start_parts[0] * 60 + (int) $old_start_parts[1];
+    $old_end_mins    = (int) $old_end_parts[0]   * 60 + (int) $old_end_parts[1];
+    $new_start_mins  = (int) $new_start_parts[0] * 60 + (int) $new_start_parts[1];
+    $time_delta      = $new_start_mins - $old_start_mins;  // signed minutes
+
+    // ── Load OLD state cho tất cả frozen target sessions ─────
+    // Cần trước khi projection để đảm bảo dùng DB state tại thời điểm FREEZE
+    $target_rows_raw = $wpdb->get_results(
+        "SELECT id, date, start_time, end_time FROM {$s_table} WHERE id IN ({$target_ids_str}) ORDER BY FIELD(id, " . implode( ',', $target_ids ) . ")"
+    );
+    $target_map = array();
+    foreach ( $target_rows_raw as $row ) {
+        $target_map[ (int) $row->id ] = $row;
+    }
+
+    // ── Project và validate TẤT CẢ sessions trước mutation ───
+    // [HINTEACH DESIGN DECISION — D9: cross-midnight → reject]
+    // Nếu bất kỳ projected session nào invalid → reject toàn bộ request, no partial update.
+    $projected = array();  // id => [ 'date', 'start_time', 'end_time' ]
+
+    foreach ( $target_ids as $tid ) {
+        if ( ! isset( $target_map[ $tid ] ) ) {
+            // Session in frozen list không load được — an toàn: reject
+            wp_send_json_error( array( 'message' => 'Không thể load trạng thái buổi học ID ' . $tid . '.' ), 500 );
+        }
+        $row = $target_map[ $tid ];
+
+        // Projected date
+        $row_date_obj   = new DateTime( $row->date );
+        $interval_spec  = 'P' . abs( $date_delta ) . 'D';
+        $interval       = new DateInterval( $interval_spec );
+        if ( $date_delta >= 0 ) {
+            $row_date_obj->add( $interval );
+        } else {
+            $row_date_obj->sub( $interval );
+        }
+        $proj_date = $row_date_obj->format( 'Y-m-d' );
+
+        // Projected start / end (minutes)
+        $row_start_parts   = explode( ':', substr( $row->start_time, 0, 5 ) );
+        $row_end_parts     = explode( ':', substr( $row->end_time, 0, 5 ) );
+        $row_start_mins    = (int) $row_start_parts[0] * 60 + (int) $row_start_parts[1];
+        $row_end_mins      = (int) $row_end_parts[0]   * 60 + (int) $row_end_parts[1];
+        $proj_start_mins   = $row_start_mins + $time_delta;
+        $proj_end_mins     = $row_end_mins   + $time_delta;  // duration preserved
+
+        // Time-grid range validation: 06:00–24:00 (360–1440 mins) — (D10 / D9 Option A — REJECT)
+        // M7 calendar time-grid operates from 06:00 to 24:00. Projected sessions must remain within viewable domain.
+        if ( $proj_start_mins < 360 || $proj_end_mins > 1440 || $proj_start_mins >= $proj_end_mins ) {
+            wp_send_json_error( array(
+                'message' => 'Không thể di chuyển: một hoặc nhiều buổi trong chuỗi sẽ vượt ngoài khung giờ hiển thị lịch (06:00–24:00). Vui lòng chọn vị trí khác.',
+            ), 400 );
+        }
+
+        // Format HH:MM
+        $proj_start_str = sprintf( '%02d:%02d', intdiv( $proj_start_mins, 60 ), $proj_start_mins % 60 );
+        $proj_end_str   = sprintf( '%02d:%02d', intdiv( $proj_end_mins,   60 ), $proj_end_mins   % 60 );
+
+        $projected[ $tid ] = array(
+            'date'       => $proj_date,
+            'start_time' => $proj_start_str,
+            'end_time'   => $proj_end_str,
+        );
+    }
+
+    // ── Conflict validation trên PROJECTED state ──────────────
+    // Sessions đang cùng move trong frozen target set được exclude khỏi mutual conflict check.
+    // Chỉ check với sessions NGOÀI tập target (external sessions).
+    foreach ( $projected as $tid => $proj ) {
+        $conflict = $wpdb->get_row( $wpdb->prepare(
+            "SELECT s.id, s.date, s.start_time, s.end_time, s.session_name
+             FROM {$s_table} s
+             JOIN {$c_table} c ON s.class_id = c.id AND c.deleted_at IS NULL
+             WHERE c.teacher_id = %d
+               AND s.date = %s
+               AND s.start_time < %s
+               AND s.end_time > %s
+               AND s.deleted_at IS NULL
+               AND s.id NOT IN ({$target_ids_str})
+             LIMIT 1",
+            $teacher_id_for_conflict,
+            $proj['date'],
+            $proj['end_time'],
+            $proj['start_time']
+        ) );
+
+        if ( $conflict ) {
+            wp_send_json_error( array(
+                'message'  => 'Buổi học bị trùng lịch.',
+                'conflict' => array(
+                    'id'           => (int) $conflict->id,
+                    'date'         => $conflict->date,
+                    'start_time'   => $conflict->start_time,
+                    'end_time'     => $conflict->end_time,
+                    'session_name' => $conflict->session_name,
+                ),
+            ), 409 );
         }
     }
 
-    // Bước 3: UPDATE toàn bộ tập target trong transaction
-    // KHÔNG update date — mỗi buổi giữ ngày riêng (HAR 08 confirmed)
+    // ── Apply delta updates ALL OR NOTHING trong transaction ──
     $wpdb->query( 'START TRANSACTION' );
 
     $updated_count = 0;
     foreach ( $target_ids as $tid ) {
-        $ok = $wpdb->update( $s_table, $update_data, array( 'id' => $tid ), $update_format, array( '%d' ) );
+        $proj = $projected[ $tid ];
+
+        // M8 Review Correction: PATH C is SCHEDULE-ONLY.
+        // Mutates ONLY date, start_time, end_time, updated_at.
+        // Preserves each session's own class_id, price, type, session_name, content,
+        // homework_content, general_comment, display_color, and session_students.
+        $drag_update_data = array(
+            'date'       => $proj['date'],
+            'start_time' => $proj['start_time'],
+            'end_time'   => $proj['end_time'],
+            'updated_at' => $now,
+        );
+        $drag_update_format = array(
+            '%s',
+            '%s',
+            '%s',
+            '%s',
+        );
+
+        $ok = $wpdb->update( $s_table, $drag_update_data, array( 'id' => $tid ), $drag_update_format, array( '%d' ) );
         if ( false === $ok ) {
             $wpdb->query( 'ROLLBACK' );
             wp_send_json_error( array( 'message' => 'Không thể cập nhật buổi học ID ' . $tid . '. Vui lòng thử lại.' ), 500 );
         }
         $updated_count++;
 
-        // Đồng bộ session_students cho từng buổi trong tập
-        hinteach_sync_session_students( $tid, $student_ids, $now );
+        // M8 Review Correction: Do NOT call hinteach_sync_session_students() in PATH C.
+        // Drag move is schedule-only and must preserve individual student assignments.
     }
 
     $wpdb->query( 'COMMIT' );
