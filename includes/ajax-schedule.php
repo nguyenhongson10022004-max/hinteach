@@ -72,7 +72,8 @@ function hinteach_schedule_check_access() {
  *
  * Response: { sessions: [ { id, class_id, date, start_time, end_time,
  *                            type, session_name, display_color,
- *                            class_name, class_color }, ... ] }
+ *                            class_name, class_color, price,
+ *                            repeat_group_id }, ... ] }
  *
  * Không có buổi nào của giáo viên khác lọt vào kết quả
  * (trừ admin có manage_hinteach_all — xem tất cả).
@@ -116,7 +117,7 @@ function hinteach_ajax_session_list() {
     $s_table = $wpdb->prefix . 'hinteach_sessions';
     $c_table = $wpdb->prefix . 'hinteach_classes';
 
-    // Chỉ SELECT field cần thiết cho M1 — không lấy price/content/repeat_group_id/is_exception
+    // M1 baseline + M8 Phase 2: thêm s.price và s.repeat_group_id phục vụ calendar UI/summary
     $select = "
         SELECT
             s.id,
@@ -128,7 +129,9 @@ function hinteach_ajax_session_list() {
             s.session_name,
             s.display_color,
             c.name  AS class_name,
-            c.color AS class_color
+            c.color AS class_color,
+            s.price,
+            s.repeat_group_id
         FROM {$s_table} s
         JOIN {$c_table} c ON s.class_id = c.id AND c.deleted_at IS NULL
         WHERE s.deleted_at IS NULL
