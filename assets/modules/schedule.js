@@ -29,10 +29,13 @@ const ScheduleModule = {
     /** Threshold pixel trước khi coi là drag (không phải click) */
     DRAG_THRESHOLD: 6,
 
-    /** Ngày bất kỳ trong tuần đang xem — state nội bộ */
+    /** Chế độ xem hiện tại: 'week' | 'month' — M8 Phase 4 */
+    _currentView: 'week',
+
+    /** Ngày bất kỳ trong tuần/tháng đang xem — state nội bộ */
     _currentDate: new Date(),
 
-    /** Danh sách sessions tuần hiện tại */
+    /** Danh sách sessions tuần/tháng hiện tại */
     _sessions: [],
 
     /** Clipboard lưu session in-memory */
@@ -54,6 +57,7 @@ const ScheduleModule = {
      */
     async render(container) {
         // Reset về tuần hiện tại mỗi lần mount tab
+        this._currentView = 'week';
         this._currentDate = new Date();
         this._dismissContextMenu();
 
@@ -79,25 +83,38 @@ const ScheduleModule = {
     // ──────────────────────────────────────────────────────────
 
     /**
-     * Render lại toàn bộ calendar (header nav + 7 cột ngày).
-     * Gọi API hinteach_session_list để lấy sessions trong khoảng tuần.
+     * Render lại toàn bộ calendar (tuần hoặc tháng).
+     * Gọi API hinteach_session_list để lấy sessions trong khoảng xem.
      */
     async _render() {
         const cal = document.getElementById('ht-schedule-calendar');
         if (!cal) return;
 
         this._dismissContextMenu();
-        const week = this._getWeekRange(this._currentDate);
 
-        try {
-            const sessions = await this._loadSessions(week.fromStr, week.toStr);
-            this._sessions = sessions;
-            cal.innerHTML = this._buildCalendarHtml(week, sessions);
-            this._bindNavEvents();
-            this._bindSessionEvents();       // M4 click/contextmenu + M7 drag move
-            this._bindCalendarAreaEvents();  // M6 contextmenu vùng trống + M7 drag create
-        } catch (err) {
-            cal.innerHTML = `<div class="ht-error"><p>Lỗi tải lịch: ${HT.utils.escapeHtml(err.message)}</p></div>`;
+        if (this._currentView === 'month') {
+            const monthRange = this._getMonthGridRange(this._currentDate);
+            try {
+                const sessions = await this._loadSessions(monthRange.fromStr, monthRange.toStr);
+                this._sessions = sessions;
+                cal.innerHTML = this._buildMonthCalendarHtml(this._currentDate, monthRange, sessions);
+                this._bindNavEvents();
+                this._bindMonthEvents();
+            } catch (err) {
+                cal.innerHTML = `<div class="ht-error"><p>Lỗi tải lịch: ${HT.utils.escapeHtml(err.message)}</p></div>`;
+            }
+        } else {
+            const week = this._getWeekRange(this._currentDate);
+            try {
+                const sessions = await this._loadSessions(week.fromStr, week.toStr);
+                this._sessions = sessions;
+                cal.innerHTML = this._buildCalendarHtml(week, sessions);
+                this._bindNavEvents();
+                this._bindSessionEvents();       // M4 click/contextmenu + M7 drag move
+                this._bindCalendarAreaEvents();  // M6 contextmenu vùng trống + M7 drag create
+            } catch (err) {
+                cal.innerHTML = `<div class="ht-error"><p>Lỗi tải lịch: ${HT.utils.escapeHtml(err.message)}</p></div>`;
+            }
         }
     },
 
@@ -270,6 +287,214 @@ const ScheduleModule = {
     },
 
     /**
+     * Tính toán khoảng ngày cho lưới 42 ô của Tháng (Thứ Hai đầu tiên đến Chủ Nhật tuần thứ 6).
+     * M8 Phase 4: Fixed 42-cell matrix (Monday-first, 7 cols x 6 rows).
+     *
+     * @param {Date} anchorDate
+     * @returns {{ anchorYear: number, anchorMonth: number, fromStr: string, toStr: string, cells: Array }}
+     */
+    _getMonthGridRange(anchorDate) {
+        const anchorYear = anchorDate.getFullYear();
+        const anchorMonth = anchorDate.getMonth();
+        const firstDayOfMonth = new Date(anchorYear, anchorMonth, 1);
+        const dayOfWeek = firstDayOfMonth.getDay(); // 0 = Chủ Nhật, 1 = Thứ Hai, ...
+        const mondayColIndex = (dayOfWeek + 6) % 7; // 0 = Thứ Hai, 6 = Chủ Nhật
+
+        // Ngày bắt đầu ô đầu tiên (Thứ Hai của tuần chứa ngày 1)
+        const firstGridDate = new Date(anchorYear, anchorMonth, 1 - mondayColIndex);
+        const todayIso = this._toIso(new Date());
+
+        const cells = [];
+        for (let i = 0; i < 42; i++) {
+            const d = new Date(firstGridDate.getFullYear(), firstGridDate.getMonth(), firstGridDate.getDate() + i);
+            const isoDate = this._toIso(d);
+            const isCurrentMonth = d.getMonth() === anchorMonth && d.getFullYear() === anchorYear;
+            cells.push({
+                date: d,
+                isoDate: isoDate,
+                dayNumber: d.getDate(),
+                isCurrentMonth: isCurrentMonth,
+                isToday: isoDate === todayIso,
+            });
+        }
+
+        return {
+            anchorYear,
+            anchorMonth,
+            fromStr: cells[0].isoDate,
+            toStr: cells[41].isoDate,
+            cells,
+        };
+    },
+
+    /**
+     * Build toàn bộ HTML calendar tháng — M8 Phase 4: Fixed 42-cell matrix.
+     *
+     * @param {Date} anchorDate
+     * @param {Object} monthRange
+     * @param {Array} sessions
+     * @returns {string} HTML string
+     */
+    _buildMonthCalendarHtml(anchorDate, monthRange, sessions) {
+        const DAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+        const anchorYear = monthRange.anchorYear;
+        const anchorMonth = monthRange.anchorMonth;
+
+        // Label header: Tháng M, YYYY (e.g. Tháng 8, 2026)
+        const headerLabel = `Tháng ${anchorMonth + 1}, ${anchorYear}`;
+
+        // Navigation Toolbar
+        const navHtml = `
+            <div class="ht-cal__nav">
+                <div class="ht-cal__view-switch">
+                    <button type="button" class="ht-btn ht-btn--sm ht-cal__view-btn" data-view="week">Tuần</button>
+                    <button type="button" class="ht-btn ht-btn--sm ht-cal__view-btn is-active" data-view="month">Tháng</button>
+                </div>
+                <div class="ht-cal__nav-controls">
+                    <button type="button" class="ht-btn ht-btn--ghost ht-btn--icon" id="ht-cal-prev" title="Tháng trước" aria-label="Tháng trước">‹</button>
+                    <button type="button" class="ht-btn ht-btn--ghost" id="ht-cal-today">Hôm nay</button>
+                    <button type="button" class="ht-btn ht-btn--ghost ht-btn--icon" id="ht-cal-next" title="Tháng sau" aria-label="Tháng sau">›</button>
+                    <span class="ht-cal__week-label">${HT.utils.escapeHtml(headerLabel)}</span>
+                </div>
+            </div>
+        `;
+
+        // ── M8 Phase 4: Tính toán Summary Cards (CHỈ tính active anchor month) ──
+        const anchorPrefix = `${anchorYear}-${String(anchorMonth + 1).padStart(2, '0')}`;
+        const monthSessions = sessions.filter(s => s.date && s.date.startsWith(anchorPrefix));
+
+        const totalCount = monthSessions.length;
+        let totalMinutes = 0;
+        let privateCount = 0;
+        let groupCount = 0;
+        let totalMoney = 0;
+
+        for (const s of monthSessions) {
+            const startM = this._timeToMinutes(s.start_time);
+            const endM = this._timeToMinutes(s.end_time || s.start_time);
+            if (endM > startM) {
+                totalMinutes += (endM - startM);
+            }
+            if (s.type === 'riêng') {
+                privateCount++;
+            } else if (s.type === 'chung') {
+                groupCount++;
+            }
+            const p = parseFloat(s.price);
+            if (Number.isFinite(p) && p > 0) {
+                totalMoney += p;
+            }
+        }
+
+        const summaryHours = (totalMinutes / 60).toFixed(1);
+        const summaryRatio = `${privateCount}/${groupCount}`;
+        const summaryMoney = HT.utils.formatCurrency(totalMoney);
+
+        const summaryHtml = `
+            <div class="ht-cal-summary-grid">
+                <div class="ht-cal-summary-card">
+                    <div class="ht-cal-summary-card__label">TỔNG BUỔI</div>
+                    <div class="ht-cal-summary-card__value">${totalCount}</div>
+                </div>
+                <div class="ht-cal-summary-card">
+                    <div class="ht-cal-summary-card__label">TỔNG GIỜ</div>
+                    <div class="ht-cal-summary-card__value">${summaryHours}</div>
+                </div>
+                <div class="ht-cal-summary-card">
+                    <div class="ht-cal-summary-card__label">1-1/LỚP HỌC</div>
+                    <div class="ht-cal-summary-card__value">${summaryRatio}</div>
+                </div>
+                <div class="ht-cal-summary-card">
+                    <div class="ht-cal-summary-card__label">TỔNG TIỀN</div>
+                    <div class="ht-cal-summary-card__value">${summaryMoney}</div>
+                </div>
+            </div>
+        `;
+
+        // Nhóm session theo ngày
+        const byDay = {};
+        for (const s of sessions) {
+            if (!byDay[s.date]) byDay[s.date] = [];
+            byDay[s.date].push(s);
+        }
+
+        // Render 42 ô
+        const cellsHtml = monthRange.cells.map(cell => {
+            const daySessions = byDay[cell.isoDate] || [];
+            // Sort by start_time
+            daySessions.sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
+
+            const visibleSessions = daySessions.slice(0, 3);
+            const overflowCount = daySessions.length - 3;
+
+            const pillsHtml = visibleSessions.map(s => {
+                const rawColor = s.display_color || s.class_color || '#4A90D9';
+                const color = HT.utils.escapeHtml(rawColor);
+                const bgColor = this._hexToRgba(rawColor, 0.12);
+                const name = HT.utils.escapeHtml(s.class_name || '');
+                const sessName = s.session_name ? HT.utils.escapeHtml(s.session_name) : '';
+                const timeStart = (s.start_time || '').slice(0, 5);
+                const timeEnd = (s.end_time || '').slice(0, 5);
+                const timeStr = timeEnd ? `${timeStart} - ${timeEnd}` : timeStart;
+
+                const isRecurring = Boolean(s.repeat_group_id && Number(s.repeat_group_id) > 0);
+                const repeatIconHtml = isRecurring
+                    ? `<span class="ht-cal-month__session-repeat" title="Buổi học thuộc chuỗi lặp" aria-label="Lịch lặp lại">↻</span>`
+                    : '';
+
+                const displayName = sessName ? `${name} · ${sessName}` : name;
+                const tooltip = `${timeStr}: ${s.class_name || ''}${s.session_name ? ' (' + s.session_name + ')' : ''}`;
+
+                return `
+                    <div class="ht-cal-month__session" data-id="${s.id}" title="${HT.utils.escapeHtml(tooltip)}" style="border-left:3px solid ${color}; background-color:${bgColor};">
+                        ${repeatIconHtml}
+                        <span class="ht-cal-month__session-time">${HT.utils.escapeHtml(timeStr)}</span>
+                        <span class="ht-cal-month__session-name">${displayName}</span>
+                    </div>
+                `;
+            }).join('');
+
+            const overflowHtml = overflowCount > 0
+                ? `<div class="ht-cal-month__overflow" title="Xem thêm ${overflowCount} buổi trong tuần">+${overflowCount} buổi khác</div>`
+                : '';
+
+            const cellClasses = ['ht-cal-month__cell'];
+            if (!cell.isCurrentMonth) cellClasses.push('ht-cal-month__cell--adjacent');
+            if (cell.isToday) cellClasses.push('ht-cal-month__cell--today');
+
+            const dateNumClasses = ['ht-cal-month__date-num'];
+            if (cell.isToday) dateNumClasses.push('ht-cal-month__date-num--today');
+
+            return `
+                <div class="${cellClasses.join(' ')}" data-date="${cell.isoDate}">
+                    <div class="ht-cal-month__cell-header">
+                        <span class="${dateNumClasses.join(' ')}">${cell.dayNumber}</span>
+                    </div>
+                    <div class="ht-cal-month__cell-body">
+                        ${pillsHtml}
+                        ${overflowHtml}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            ${navHtml}
+            ${summaryHtml}
+            <div class="ht-cal-month__wrapper">
+                <div class="ht-cal-month__grid">
+                    <div class="ht-cal-month__header-row">
+                        ${DAY_LABELS.map(l => `<div class="ht-cal-month__header-col">${l}</div>`).join('')}
+                    </div>
+                    <div class="ht-cal-month__cells">
+                        ${cellsHtml}
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    /**
      * Chuyển hex color thành rgba() với alpha cho trước (mặc định 0.12).
      * @param {string} hex
      * @param {number} alpha
@@ -393,17 +618,56 @@ const ScheduleModule = {
         });
     },
 
+    /**
+     * Bind sự kiện cho Month View:
+     * - Click session pill -> mở form sửa session (_openEditForm)
+     * - Click ô ngày (non-session area + overflow label bubble) -> chuyển sang Week View cho ngày đó
+     */
+    _bindMonthEvents() {
+        // 1. Click session pill
+        document.querySelectorAll('.ht-cal-month__session[data-id]').forEach(el => {
+            el.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const id = parseInt(el.dataset.id, 10);
+                if (id) this._openEditForm(id);
+            });
+        });
+
+        // 2. Click ô ngày (non-session area + overflow label bubble) -> chuyển sang Week View
+        document.querySelectorAll('.ht-cal-month__cell[data-date]').forEach(cell => {
+            cell.addEventListener('click', () => {
+                const dateStr = cell.dataset.date;
+                if (!dateStr) return;
+                const parts = dateStr.split('-');
+                if (parts.length === 3) {
+                    this._currentDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                } else {
+                    this._currentDate = new Date(dateStr);
+                }
+                this._currentView = 'week';
+                this._render();
+            });
+        });
+    },
+
     // ──────────────────────────────────────────────────────────
     // Navigation
     // ──────────────────────────────────────────────────────────
 
     /**
-     * Chuyển tuần.
-     * @param {number} delta  -1 = tuần trước, +1 = tuần sau
+     * Chuyển tuần hoặc tháng tuỳ theo view hiện tại.
+     * M8 Phase 4: Safe month navigation (tránh JS date rollover trên ngày 29/30/31).
+     * @param {number} delta  -1 = trước, +1 = sau
      */
     _navigate(delta) {
-        this._currentDate = new Date(this._currentDate);
-        this._currentDate.setDate(this._currentDate.getDate() + delta * 7);
+        if (this._currentView === 'month') {
+            const currentYear = this._currentDate.getFullYear();
+            const currentMonth = this._currentDate.getMonth();
+            this._currentDate = new Date(currentYear, currentMonth + delta, 1);
+        } else {
+            this._currentDate = new Date(this._currentDate);
+            this._currentDate.setDate(this._currentDate.getDate() + delta * 7);
+        }
         this._render();
     },
 
@@ -421,8 +685,11 @@ const ScheduleModule = {
 
         document.querySelectorAll('.ht-cal__view-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                // Phase 3: Tuần là chế độ duy nhất active, nút Tháng là visual shell (không render Month, không toast)
-                return;
+                const targetView = btn.dataset.view;
+                if (targetView && (targetView === 'week' || targetView === 'month') && targetView !== this._currentView) {
+                    this._currentView = targetView;
+                    this._render();
+                }
             });
         });
     },
