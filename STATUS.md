@@ -456,7 +456,7 @@ Verification:
 - ✅ Manual mutation regression: standalone Week drag move, recurring Following delta, Week drag create.
 - ✅ Phase 5 live width inspection: 1920px, 1440px, 1280px, 1024px pass.
 - ✅ Zero body-level horizontal overflow at tested desktop widths.
-- ✅ Cross-module layout smoke: Classes, Students, Tuition, Grades pass.
+- ✅ Cross-module layout smoke: Classes, Students layout pass; Tuition và Grades render router error fallback an toàn, không sập layout hay crash trang (không claim tính đúng đắn nghiệp vụ).
 
 Commits:
 - `714bf8b` — feat(schedule): add recurrence drag following delta
@@ -639,7 +639,7 @@ Không có bug tồn đọng đã xác định tại thời điểm này.
 
 ## Next Recommended Task
 
-1. Khởi động GĐ4 — Tuition (Học phí)
+1. GĐ4 — Tuition (Học phí) — theo roadmap đã thiết lập tại `STATUS.md` và `docs/specs/tuition.md` (chờ Owner phê duyệt kế hoạch triển khai cụ thể).
    - Tham chiếu spec: `docs/specs/tuition.md`
    - Triển khai `includes/ajax-tuition.php`, `assets/modules/tuition.js`
    - Tính toán học phí theo 3 billing_mode (session, course, monthly)

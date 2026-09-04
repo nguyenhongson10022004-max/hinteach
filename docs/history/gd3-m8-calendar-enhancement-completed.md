@@ -112,7 +112,7 @@ GĐ3 M8 hoàn thiện các tính năng nâng cao cho module Schedule (Thời kho
   - Tinh chỉnh nút icon điều hướng tròn 32×32px, summary cards chuyển sang 2×2 dưới 900px, thêm `:focus-visible` accessibility.
   - Giữ vững các safeguard thanh cuộn ngang cục bộ: Week View (888px) và Month View (768px), không tạo thanh cuộn ngang cấp trang (`body`).
 - **Commit**: `7f7a373`
-- **QA**: Live browser inspection trên các độ phân giải 1920px, 1440px, 1280px, 1024px đều PASS; kiểm tra Classes, Students, Tuition, Grades đều ổn định; không có lỗi horizontal overflow.
+- **QA**: Live browser inspection trên các độ phân giải 1920px, 1440px, 1280px, 1024px đều PASS; Classes và Students layout ổn định; Tuition và Grades render router error fallback an toàn mà không bị co sụp layout hay crash trang (không claim tính đúng đắn nghiệp vụ); không có lỗi horizontal overflow.
 
 ---
 
@@ -170,7 +170,7 @@ GĐ3 M8 hoàn thiện các tính năng nâng cao cho module Schedule (Thời kho
 | **Phase 5 Layout 1440px** | PASS | Main 1200px, Grid 1152px, no body scroll |
 | **Phase 5 Layout 1280px** | PASS | Main 1040px, Grid 992px, no body scroll |
 | **Phase 5 Layout 1024px** | PASS | Main 784px, Week 888px local scroll, Month 768px local scroll |
-| **Cross-module Smoke** | PASS | Classes, Students, Tuition, Grades layout ổn định |
+| **Cross-module Smoke** | PASS | Classes và Students layout ổn định; Tuition và Grades render router error fallback an toàn, không sập layout hay crash trang (không claim nghiệp vụ) |
 
 ---
 
