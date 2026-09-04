@@ -868,12 +868,101 @@ body.ht-modal-open {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
     margin-bottom: 16px;
+}
+
+.ht-cal__view-switch {
+    display: inline-flex;
+    background: #f1f5f9;
+    border: 1px solid var(--ht-border);
+    border-radius: 8px;
+    padding: 2px;
+    gap: 2px;
+}
+
+.ht-cal__view-btn {
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ht-text-muted, #64748b);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.ht-cal__view-btn:hover {
+    color: var(--ht-text, #1e293b);
+}
+
+.ht-cal__view-btn.is-active {
+    background: #2563eb;
+    color: #ffffff;
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.ht-cal__nav-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#ht-cal-today {
+    border-radius: 20px;
+    padding: 4px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    background: #f8fafc;
+    border: 1px solid var(--ht-border);
+    color: var(--ht-text);
+}
+
+#ht-cal-today:hover {
+    background: #f1f5f9;
 }
 
 .ht-cal__week-label {
     font-weight: 600;
-    font-size: 16px;
+    font-size: 14px;
+    color: #2563eb;
+    margin-left: 6px;
+}
+
+/* Summary Cards — M8 Phase 3 */
+.ht-cal-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.ht-cal-summary-card {
+    background: var(--ht-bg-card, #ffffff);
+    border: 1px solid var(--ht-border, #e2e8f0);
+    border-radius: 10px;
+    padding: 12px 16px;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.ht-cal-summary-card__label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.ht-cal-summary-card__value {
+    font-size: 20px;
+    font-weight: 700;
+    color: #2563eb;
+    line-height: 1.2;
 }
 
 /* Grid: cột giờ bên trái + 7 ngày */
@@ -899,7 +988,7 @@ body.ht-modal-open {
 }
 
 .ht-cal__time-gutter-header {
-    height: 48px;
+    height: 52px;
     border-bottom: 1px solid var(--ht-border);
     background: #f8fafc;
     flex-shrink: 0;
@@ -942,7 +1031,7 @@ body.ht-modal-open {
     text-align: center;
     border-bottom: 1px solid var(--ht-border);
     background: #f8fafc;
-    height: 48px;
+    height: 52px;
     box-sizing: border-box;
     flex-shrink: 0;
     display: flex;
@@ -953,12 +1042,32 @@ body.ht-modal-open {
 }
 
 .ht-cal__col--today .ht-cal__day-header {
-    background: #dcfce7;
+    background: #dbeafe;
+    border-bottom-color: #bfdbfe;
     font-weight: 600;
 }
 
+.ht-cal__day-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ht-text);
+}
+
+.ht-cal__col--today .ht-cal__day-title {
+    color: #1d4ed8;
+}
+
+.ht-cal__day-sep {
+    color: #94a3b8;
+    font-size: 11px;
+}
+
 .ht-cal__day-name {
-    display: block;
+    display: inline-block;
     font-size: 11px;
     font-weight: 600;
     color: var(--ht-text-muted);
@@ -966,11 +1075,31 @@ body.ht-modal-open {
     letter-spacing: 0.5px;
 }
 
+.ht-cal__col--today .ht-cal__day-name {
+    color: #1d4ed8;
+}
+
 .ht-cal__day-date {
-    display: block;
-    font-size: 13px;
+    display: inline-block;
+    font-size: 12px;
     font-weight: 700;
     color: var(--ht-text);
+}
+
+.ht-cal__col--today .ht-cal__day-date {
+    color: #1d4ed8;
+}
+
+.ht-cal__day-revenue {
+    font-size: 11px;
+    font-weight: 500;
+    color: #64748b;
+    line-height: 1.2;
+}
+
+.ht-cal__col--today .ht-cal__day-revenue {
+    color: #2563eb;
+    font-weight: 600;
 }
 
 /* Body ngày — container định vị tuyệt đối cho session block */
@@ -1057,6 +1186,29 @@ body.ht-modal-open {
     text-overflow: ellipsis;
     margin-top: 1px;
     font-variant-numeric: tabular-nums;
+}
+
+.ht-session-block__repeat {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    font-size: 12px;
+    font-weight: 700;
+    color: inherit;
+    opacity: 0.8;
+    line-height: 1;
+    pointer-events: none;
+}
+
+.ht-session-block__price {
+    font-size: 10px;
+    font-weight: 600;
+    color: #334155;
+    margin-top: 2px;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Ghost element kéo theo chuột khi Drag Move — full-size session block clone */

@@ -108,11 +108,70 @@ const ScheduleModule = {
      * @param {Array} sessions
      * @returns {string} HTML string
      */
+    /**
+     * Build toàn bộ HTML calendar tuần — M7 time-grid layout + M8 Phase 3 Week View enhancements:
+     * - Summary Cards (Tổng buổi, Tổng giờ, 1-1/Lớp học, Tổng tiền)
+     * - Navigation bar (Week/Month switch, Hôm nay button, prev/next, week range label)
+     * - Daily revenue in each day header
+     *
+     * @param {{ from: Date, to: Date, fromStr: string, toStr: string }} week
+     * @param {Array} sessions
+     * @returns {string} HTML string
+     */
     _buildCalendarHtml(week, sessions) {
         const DAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
         const today = this._toIso(new Date());
         const totalHours = this.DAY_END_HOUR - this.DAY_START_HOUR;
         const gridHeight = totalHours * this.HOUR_HEIGHT;
+
+        // ── M8 Phase 3: Tính toán Summary Cards ──────────────────
+        const totalCount = sessions.length;
+        let totalMinutes = 0;
+        let privateCount = 0;
+        let groupCount = 0;
+        let totalMoney = 0;
+
+        for (const s of sessions) {
+            const startM = this._timeToMinutes(s.start_time);
+            const endM = this._timeToMinutes(s.end_time || s.start_time);
+            if (endM > startM) {
+                totalMinutes += (endM - startM);
+            }
+            if (s.type === 'riêng') {
+                privateCount++;
+            } else if (s.type === 'chung') {
+                groupCount++;
+            }
+            const p = parseFloat(s.price);
+            if (Number.isFinite(p) && p > 0) {
+                totalMoney += p;
+            }
+        }
+
+        const summaryHours = (totalMinutes / 60).toFixed(1);
+        const summaryRatio = `${privateCount}/${groupCount}`;
+        const summaryMoney = HT.utils.formatCurrency(totalMoney);
+
+        const summaryHtml = `
+            <div class="ht-cal-summary-grid">
+                <div class="ht-cal-summary-card">
+                    <div class="ht-cal-summary-card__label">TỔNG BUỔI</div>
+                    <div class="ht-cal-summary-card__value">${totalCount}</div>
+                </div>
+                <div class="ht-cal-summary-card">
+                    <div class="ht-cal-summary-card__label">TỔNG GIỜ</div>
+                    <div class="ht-cal-summary-card__value">${summaryHours}</div>
+                </div>
+                <div class="ht-cal-summary-card">
+                    <div class="ht-cal-summary-card__label">1-1/LỚP HỌC</div>
+                    <div class="ht-cal-summary-card__value">${summaryRatio}</div>
+                </div>
+                <div class="ht-cal-summary-card">
+                    <div class="ht-cal-summary-card__label">TỔNG TIỀN</div>
+                    <div class="ht-cal-summary-card__value">${summaryMoney}</div>
+                </div>
+            </div>
+        `;
 
         // Nhóm session theo ngày
         const byDay = {};
@@ -129,8 +188,24 @@ const ScheduleModule = {
             days.push(this._toIso(d));
         }
 
-        // Label header
+        // Label header: DD/MM - DD/MM/YYYY
         const headerLabel = `${this._fmtShort(week.fromStr)} – ${this._fmtShort(week.toStr)}/${week.toStr.slice(0, 4)}`;
+
+        // Navigation Toolbar (M8 Phase 3: Switch Tuần/Tháng + Nút Hôm nay)
+        const navHtml = `
+            <div class="ht-cal__nav">
+                <div class="ht-cal__view-switch">
+                    <button type="button" class="ht-btn ht-btn--sm ht-cal__view-btn is-active" data-view="week">Tuần</button>
+                    <button type="button" class="ht-btn ht-btn--sm ht-cal__view-btn" data-view="month">Tháng</button>
+                </div>
+                <div class="ht-cal__nav-controls">
+                    <button type="button" class="ht-btn ht-btn--ghost ht-btn--icon" id="ht-cal-prev" title="Tuần trước" aria-label="Tuần trước">‹</button>
+                    <button type="button" class="ht-btn ht-btn--ghost" id="ht-cal-today">Hôm nay</button>
+                    <button type="button" class="ht-btn ht-btn--ghost ht-btn--icon" id="ht-cal-next" title="Tuần sau" aria-label="Tuần sau">›</button>
+                    <span class="ht-cal__week-label">${HT.utils.escapeHtml(headerLabel)}</span>
+                </div>
+            </div>
+        `;
 
         // Hour rows HTML — dùng chung cho mọi cột ngày
         let hourRowsHtml = '';
@@ -148,18 +223,33 @@ const ScheduleModule = {
         }
         gutterHtml += '</div></div>';
 
-        // Cột ngày
+        // Cột ngày — M8 Phase 3: thêm Daily revenue dưới tên thứ
         const colsHtml = days.map((isoDate, i) => {
             const isToday = isoDate === today;
-            const blocks = (byDay[isoDate] || [])
+            const daySessions = byDay[isoDate] || [];
+
+            let dayRevenue = 0;
+            for (const s of daySessions) {
+                const p = parseFloat(s.price);
+                if (Number.isFinite(p) && p > 0) {
+                    dayRevenue += p;
+                }
+            }
+            const dayRevenueStr = HT.utils.formatCurrency(dayRevenue);
+
+            const blocks = daySessions
                 .map(s => this._renderSessionBlock(s))
                 .join('');
 
             return `
                 <div class="ht-cal__col${isToday ? ' ht-cal__col--today' : ''}">
                     <div class="ht-cal__day-header">
-                        <span class="ht-cal__day-name">${DAY_LABELS[i]}</span>
-                        <span class="ht-cal__day-date">${this._fmtShort(isoDate)}</span>
+                        <div class="ht-cal__day-title">
+                            <span class="ht-cal__day-name">${DAY_LABELS[i]}</span>
+                            <span class="ht-cal__day-sep">·</span>
+                            <span class="ht-cal__day-date">${this._fmtShort(isoDate)}</span>
+                        </div>
+                        <div class="ht-cal__day-revenue">${dayRevenueStr}</div>
                     </div>
                     <div class="ht-cal__day-body" data-date="${isoDate}" style="height:${gridHeight}px;">
                         ${hourRowsHtml}
@@ -170,11 +260,8 @@ const ScheduleModule = {
         }).join('');
 
         return `
-            <div class="ht-cal__nav">
-                <button type="button" class="ht-btn ht-btn--ghost" id="ht-cal-prev">← Tuần trước</button>
-                <span class="ht-cal__week-label">${HT.utils.escapeHtml(headerLabel)}</span>
-                <button type="button" class="ht-btn ht-btn--ghost" id="ht-cal-next">Tuần sau →</button>
-            </div>
+            ${navHtml}
+            ${summaryHtml}
             <div class="ht-cal__grid">
                 ${gutterHtml}
                 ${colsHtml}
@@ -208,7 +295,9 @@ const ScheduleModule = {
 
     /**
      * Render 1 session block — M7: absolute position theo start_time/end_time.
-     * display_color ưu tiên; fallback về class_color.
+     * M8 Phase 3:
+     * - Recurrence indicator: icon ↻ khi session thuộc chuỗi lặp (repeat_group_id)
+     * - Price display: hiển thị học phí nếu price > 0
      *
      * @param {Object} s  Session object
      * @returns {string} HTML string
@@ -229,11 +318,25 @@ const ScheduleModule = {
         const top = Math.max(0, (startM - dayStartM) / 60 * this.HOUR_HEIGHT);
         const height = Math.max(20, (endM - startM) / 60 * this.HOUR_HEIGHT);
 
+        // M8 Phase 3: Recurrence indicator
+        const isRecurring = Boolean(s.repeat_group_id && Number(s.repeat_group_id) > 0);
+        const repeatIconHtml = isRecurring
+            ? `<span class="ht-session-block__repeat" title="Buổi học thuộc chuỗi lặp" aria-label="Lịch lặp lại">↻</span>`
+            : '';
+
+        // M8 Phase 3: Price display on session block
+        const priceNum = parseFloat(s.price);
+        const priceHtml = (Number.isFinite(priceNum) && priceNum > 0)
+            ? `<div class="ht-session-block__price">${HT.utils.formatCurrency(priceNum)}</div>`
+            : '';
+
         return `
             <div class="ht-session-block" data-id="${s.id}" style="border-left:3px solid ${color}; background-color:${bgColor}; top:${top}px; height:${height}px;">
+                ${repeatIconHtml}
+                <div class="ht-session-block__time">${HT.utils.escapeHtml(timeStr)}</div>
                 <div class="ht-session-block__name">${name}</div>
                 ${sessName ? `<div class="ht-session-block__title">${sessName}</div>` : ''}
-                <div class="ht-session-block__time">${HT.utils.escapeHtml(timeStr)}</div>
+                ${priceHtml}
             </div>
         `;
     },
@@ -304,12 +407,24 @@ const ScheduleModule = {
         this._render();
     },
 
-    /** Bind nút ← → sau mỗi lần render */
+    /** Bind nút điều hướng và chuyển chế độ xem sau mỗi lần render */
     _bindNavEvents() {
         document.getElementById('ht-cal-prev')
             ?.addEventListener('click', () => this._navigate(-1));
         document.getElementById('ht-cal-next')
             ?.addEventListener('click', () => this._navigate(+1));
+        document.getElementById('ht-cal-today')
+            ?.addEventListener('click', () => {
+                this._currentDate = new Date();
+                this._render();
+            });
+
+        document.querySelectorAll('.ht-cal__view-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Phase 3: Tuần là chế độ duy nhất active, nút Tháng là visual shell (không render Month, không toast)
+                return;
+            });
+        });
     },
 
     // ──────────────────────────────────────────────────────────
