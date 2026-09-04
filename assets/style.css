@@ -53,6 +53,20 @@
     padding: 0;
 }
 
+/* WordPress Block Theme / Content Wrapper unconstrain for HinTeach */
+body.page-template-hin-teach-full-width .entry-content,
+body.page-template-hin-teach-full-width .wp-block-post-content,
+body.page-template-hin-teach-full-width .has-global-padding,
+.entry-content:has(#hinteach-app),
+.wp-block-post-content:has(#hinteach-app),
+.has-global-padding:has(#hinteach-app),
+.is-layout-constrained:has(#hinteach-app) {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    max-width: 100% !important;
+}
+
+#hinteach-app.ht-app,
 .ht-app {
     font-family: var(--ht-font);
     font-size: var(--ht-font-size);
@@ -61,6 +75,11 @@
     display: flex;
     min-height: 100vh;
     position: relative;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -142,6 +161,8 @@
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    min-width: 0;
+    width: calc(100% - var(--ht-sidebar-width));
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -202,6 +223,14 @@
 .ht-content {
     flex: 1;
     padding: 24px;
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.ht-module {
+    width: 100%;
+    min-width: 0;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -752,6 +781,7 @@ body.ht-modal-open {
 
     .ht-main {
         margin-left: 0;
+        width: 100%;
     }
 
     .ht-topbar__menu-toggle {
@@ -861,6 +891,7 @@ body.ht-modal-open {
 
 #ht-schedule-calendar {
     width: 100%;
+    min-width: 0;
     overflow-x: auto;
 }
 
@@ -871,12 +902,13 @@ body.ht-modal-open {
     flex-wrap: wrap;
     gap: 12px;
     margin-bottom: 16px;
+    width: 100%;
 }
 
 .ht-cal__view-switch {
     display: inline-flex;
     background: #f1f5f9;
-    border: 1px solid var(--ht-border);
+    border: 1px solid var(--ht-border, #e2e8f0);
     border-radius: 8px;
     padding: 2px;
     gap: 2px;
@@ -911,18 +943,45 @@ body.ht-modal-open {
     gap: 8px;
 }
 
+.ht-btn--icon {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 0;
+    color: var(--ht-text, #1e293b);
+    border: 1px solid var(--ht-border, #e2e8f0);
+    background: #f8fafc;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.ht-btn--icon:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: var(--ht-text, #0f172a);
+}
+
 #ht-cal-today {
     border-radius: 20px;
-    padding: 4px 14px;
+    padding: 5px 16px;
     font-size: 13px;
     font-weight: 500;
     background: #f8fafc;
-    border: 1px solid var(--ht-border);
-    color: var(--ht-text);
+    border: 1px solid var(--ht-border, #e2e8f0);
+    color: var(--ht-text, #1e293b);
+    cursor: pointer;
+    transition: all 0.15s ease;
 }
 
 #ht-cal-today:hover {
     background: #f1f5f9;
+    border-color: #cbd5e1;
 }
 
 .ht-cal__week-label {
@@ -932,21 +991,28 @@ body.ht-modal-open {
     margin-left: 6px;
 }
 
-/* Summary Cards — M8 Phase 3 */
+/* Summary Cards — M8 Phase 3 / Phase 5 Polish */
 .ht-cal-summary-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 12px;
     margin-bottom: 16px;
+    width: 100%;
 }
 
 .ht-cal-summary-card {
     background: var(--ht-bg-card, #ffffff);
     border: 1px solid var(--ht-border, #e2e8f0);
     border-radius: 10px;
-    padding: 12px 16px;
+    padding: 14px 16px;
     text-align: center;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.ht-cal-summary-card:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
 }
 
 .ht-cal-summary-card__label {
@@ -955,7 +1021,7 @@ body.ht-modal-open {
     color: #64748b;
     letter-spacing: 0.5px;
     text-transform: uppercase;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
 }
 
 .ht-cal-summary-card__value {
@@ -963,6 +1029,13 @@ body.ht-modal-open {
     font-weight: 700;
     color: #2563eb;
     line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+    .ht-cal-summary-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 
 /* Grid: cột giờ bên trái + 7 ngày */
@@ -975,6 +1048,7 @@ body.ht-modal-open {
     border-radius: var(--ht-radius);
     overflow: hidden;
     min-width: 888px;
+    width: 100%;
     box-shadow: var(--ht-shadow);
 }
 
@@ -1622,17 +1696,19 @@ body.ht-modal-open {
     white-space: nowrap;
 }
 
-/* ── Month Calendar View (M8 Phase 4) ────────────────────────── */
+/* ── Month Calendar View (M8 Phase 4 / Phase 5 Polish) ────────── */
 
 /* Responsive horizontal scroll wrapper */
 .ht-cal-month__wrapper {
     width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    border-radius: var(--ht-radius, 8px);
 }
 
 /* 42-cell Month Grid container (min-width safeguard) */
 .ht-cal-month__grid {
+    width: 100%;
     min-width: 768px;
     display: flex;
     flex-direction: column;
@@ -1640,6 +1716,7 @@ body.ht-modal-open {
     border-radius: var(--ht-radius, 8px);
     background: var(--ht-bg-card, #ffffff);
     overflow: hidden;
+    box-shadow: var(--ht-shadow);
 }
 
 /* Weekday column header row (T2 .. CN) */
@@ -1648,6 +1725,7 @@ body.ht-modal-open {
     grid-template-columns: repeat(7, 1fr);
     background: #f8fafc;
     border-bottom: 1px solid var(--ht-border, #e2e8f0);
+    width: 100%;
 }
 
 .ht-cal-month__header-col {
@@ -1670,7 +1748,8 @@ body.ht-modal-open {
 .ht-cal-month__cells {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    grid-auto-rows: minmax(110px, 1fr);
+    grid-auto-rows: minmax(115px, 1fr);
+    width: 100%;
 }
 
 /* Date cell */
@@ -1684,7 +1763,7 @@ body.ht-modal-open {
     background: #ffffff;
     cursor: pointer;
     transition: background-color 0.15s ease;
-    min-height: 110px;
+    min-height: 115px;
     position: relative;
 }
 
@@ -1825,4 +1904,13 @@ body.ht-modal-open {
 .ht-cal-month__overflow:hover {
     background: #e2e8f0;
     color: #1e293b;
+}
+
+/* Accessibility & focus rings */
+.ht-cal__view-btn:focus-visible,
+#ht-cal-today:focus-visible,
+.ht-btn--icon:focus-visible,
+.ht-cal-month__cell:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
 }
