@@ -895,14 +895,112 @@ Reuse API sửa buổi học (Mục 7). Payload liên quan: `date`, `startTime`,
 
 Chưa có HAR xác nhận behavior resize (kéo dãn để đổi duration). Không implement trong M7; chuyển sang đánh giá lại ở GĐ3 M8 nếu có nhu cầu + evidence.
 
-### Out of scope — chuyển sang GĐ3 M8
+### Out of scope — chuyển sang GĐ3 M8 (đã giải quyết tại M8)
 
-- Week/Month view switch
-- Calendar summary dashboard
-- Daily revenue summary
-- Convert single session → recurrence
-- Advanced recurrence date-shift behavior
-- Resize session
+- Week/Month view switch (hoàn thành tại M8 Phase 4)
+- Calendar summary dashboard (hoàn thành tại M8 Phase 3)
+- Daily revenue summary (hoàn thành tại M8 Phase 3)
+- Advanced recurrence date-shift behavior (hoàn thành tại M8 Phase 1)
+
+---
+
+## 20. Calendar Enhancement — M8
+
+> Implementation status: ✅ COMPLETED
+>
+> Commits:
+> - `714bf8b` — feat(schedule): add recurrence drag following delta
+> - `f9446a9` — feat(schedule): expose price and recurrence in session list
+> - `35dff6b` — feat(schedule): enhance week calendar view
+> - `46d0145` — feat(schedule): add month calendar view
+> - `7f7a373` — style(schedule): stabilize full-width calendar layout
+>
+> QA verification:
+> - Automated QA Phase 3 (8 passed, 0 failed)
+> - Automated QA Phase 4 (12 passed, 0 failed, 2 accepted fixture skips)
+> - Manual mutation regression: standalone Week drag move, recurring Following delta, Week drag create (PASS)
+> - Phase 5 live width inspection (1920px, 1440px, 1280px, 1024px) — zero body horizontal overflow
+
+### 20.1 Week View Enhancements
+
+**[HINTEACH IMPLEMENTATION CONFIRMED]**
+
+- **Architecture**:
+  - Thứ Hai đầu tuần (Monday-first), 7 ngày hiển thị từ T2 đến CN.
+  - Time-grid 06:00–24:00 (18 khung giờ, mỗi giờ 48px, tổng chiều cao 864px).
+  - Snap bước kéo: 30 phút (`SNAP_MINUTES = 30`).
+- **Drag Create & Drag Move**:
+  - Drag Create: kéo vùng trống trên cột ngày tạo nhanh buổi học qua create modal.
+  - Drag Move: kéo thả session block sang ngày/giờ mới, có ghost preview, kiểm tra conflict (409) rollback an toàn.
+- **Recurrence Scope Behavior & Discriminator**:
+  - Khi kéo session thuộc chuỗi lặp, hệ thống hỏi phạm vi cập nhật qua dialog: `single` (chỉ buổi này) hoặc `following` (buổi này và các buổi sau).
+  - **M8 Following Drag Delta Path**: sử dụng cờ `drag_move=true` gửi lên backend `wp_ajax_hinteach_session_save`.
+  - Phân biệt nghiệp vụ:
+    - **Edit Following (từ form modal)**: giữ nguyên ngữ nghĩa giá trị tuyệt đối (user nhập trực tiếp `start_time`/`end_time` mới, tất cả các buổi sau nhận cùng giờ/phút tuyệt đối đó).
+    - **Drag Following (từ calendar kéo thả)**: tính toán độ lệch ngày (`dayDelta`) và độ lệch phút (`timeDelta`) so với vị trí ban đầu của session bị kéo, sau đó dịch chuyển đồng bộ tất cả các buổi sau theo delta đó:
+      `new_date = orig_date + dayDelta`
+      `new_start = orig_start + timeDelta`
+      `new_end = orig_end + timeDelta`
+    - Cập nhật schedule-only (chỉ cập nhật ngày giờ trên bảng `wp_hinteach_sessions`, không resync danh sách học sinh).
+    - Thực thi trong 1 database transaction (all-or-nothing rollback nếu có lỗi).
+    - Từ chối nếu delta làm buổi học vượt quá nửa đêm (cross-midnight rejection).
+    - Kiểm tra conflict trùng lịch cho từng buổi trong chuỗi.
+- **Summary Cards (4 chỉ số tuần)**:
+  - `TỔNG BUỔI`: tổng số buổi học nằm trong tuần đang xem.
+  - `TỔNG GIỜ`: tổng thời lượng dạy (giờ) tính theo `end_time - start_time`.
+  - `1-1/LỚP HỌC`: tỷ lệ số buổi kèm riêng (`type === 'riêng'`) / số buổi lớp chung (`type === 'chung'`).
+  - `TỔNG TIỀN`: tổng doanh thu học phí các buổi trong tuần (format tiền tệ VNĐ).
+- **Daily Revenue**:
+  - Hiển thị doanh thu ngày ngay dưới header ngày trong lưới tuần (`formatCurrency(dayTotal)`).
+- **Session Block Visuals**:
+  - Hiển thị icon lặp `↻` (`.ht-session-block__repeat`) ở góc trên session block nếu `repeat_group_id > 0`.
+  - Hiển thị học phí (`.ht-session-block__price`) nếu `price > 0`.
+- **Navigation Controls**:
+  - Nút "Hôm nay" (`#ht-cal-today`): quay nhanh về tuần chứa ngày hiện tại.
+  - Nút chuyển chế độ xem "Tuần / Tháng" (`.ht-cal__view-switch`).
+
+### 20.2 Month View
+
+**[HINTEACH IMPLEMENTATION CONFIRMED]**
+
+- **Matrix**:
+  - Lưới cố định 42 ô (7 cột × 6 hàng, Monday-first), bao gồm các ngày thuộc tháng hiện tại và các ngày đệm (adjacent filler dates) từ tháng trước và tháng sau.
+  - Đảm bảo layout ổn định không bị giật chiều cao khi chuyển giữa các tháng 28, 29, 30, hoặc 31 ngày.
+- **Filler Dates & Sessions**:
+  - Các ô ngày thuộc tháng trước/tháng sau được gắn class `.ht-cal-month__cell--adjacent` với tone màu nhạt hơn.
+  - Buổi học thuộc ngày filler vẫn được hiển thị trên ô lịch, nhưng **bị loại trừ** khỏi thống kê 4 card tóm tắt của tháng.
+- **Anchor Month Summary**:
+  - 4 thẻ tóm tắt (Tổng buổi, Tổng giờ, 1-1/Lớp học, Tổng tiền) khi ở Month View chỉ tính toán cho các buổi học có ngày thuộc đúng tháng đang xem (`isCurrentMonthDate(s.date)`), đồng bộ với tiêu đề "Tháng M, YYYY".
+- **Session Pills & Overflow**:
+  - Mỗi ô ngày hiển thị tối đa 3 session pill.
+  - Nếu ô có từ 4 buổi học trở lên: hiển thị 2–3 pill đầu và 1 nhãn `+N buổi khác` (`.ht-cal-month__overflow-label`).
+- **Interactions**:
+  - Click vào session pill: mở modal chi tiết/chỉnh sửa buổi học (reuse flow edit M4/M5).
+  - Click vào khoảng trống trong ô ngày: tự động chuyển sang chế độ Week View chứa ngày được click.
+  - Không hỗ trợ Drag Move hoặc Drag Create trên Month View (thao tác kéo thả chỉ dành riêng cho Week time-grid).
+  - Không mở context menu trên Month View.
+- **Safe Month Navigation**:
+  - Khi bấm nút `‹` (tháng trước) hoặc `›` (tháng sau), thuật toán điều hướng luôn gán ngày về ngày 1 của tháng kế tiếp (`new Date(year, month ± 1, 1)`) để ngăn chặn triệt để bug nhảy cóc tháng trên các ngày 29, 30, 31.
+
+### 20.3 Layout & WordPress Integration
+
+**[HINTEACH IMPLEMENTATION CONFIRMED]**
+
+- **WordPress Page Template**:
+  - Trang HinTeach sử dụng template WordPress chuyên dụng: `HinTeach Full Width` (`page-template-hin-teach-full-width`), loại bỏ post title, metadata, và comments wrapper từ theme.
+- **Block Theme Width Unconstrain**:
+  - WordPress Twenty Twenty-Four block theme mặc định áp đặt `max-width: 620px` lên các element con của `.entry-content.is-layout-constrained` và đệm ngang `padding: 0 102.4px` qua `.has-global-padding`.
+  - CSS HinTeach unconstrain có chọn lọc thông qua:
+    `body.page-template-hin-teach-full-width .entry-content`, `.entry-content:has(#hinteach-app)`, và `.is-layout-constrained:has(#hinteach-app)`.
+  - `#hinteach-app.ht-app` được thiết lập `width: 100% !important; max-width: 100% !important; margin: 0 !important;` loại bỏ hoàn toàn tình trạng co hẹp 620px.
+- **Root Anti-Shrink & Flex Sizing**:
+  - `.ht-sidebar`: Cố định 240px (`position: fixed; top: 0; left: 0;`).
+  - `.ht-main`: Chiếm toàn bộ không gian còn lại: `margin-left: var(--ht-sidebar-width); width: calc(100% - var(--ht-sidebar-width)); min-width: 0;`.
+  - `.ht-content`, `.ht-module`, `#ht-schedule-calendar`: Đều sử dụng `width: 100%; min-width: 0;` với `box-sizing: border-box`.
+  - Không tạo thanh cuộn ngang cấp trang (`body`) ở các độ phân giải desktop chuẩn (1024, 1280, 1440, 1920).
+- **Local Overflow Safeguards**:
+  - Week Grid giữ safeguard `min-width: 888px`, thanh cuộn ngang chỉ xuất hiện cục bộ bên trong `#ht-schedule-calendar` khi màn hình < 888px.
+  - Month Grid giữ safeguard `min-width: 768px`, thanh cuộn ngang chỉ xuất hiện cục bộ bên trong `.ht-cal-month__wrapper` khi màn hình < 768px.
 
 ---
 
@@ -927,12 +1025,11 @@ M7 ✅ Calendar Interaction
     - Time-grid calendar
     - Drag create (reuse M2 hinteach_session_save — no new backend)
     - Drag move (reuse M4 edit API, updateScope prompt, 409 conflict rollback)
-    - Resize — CHƯA CÓ HAR, không implement, chuyển GĐ3 M8
-M8 ⏳ Calendar Enhancement (planned)
-    - Week/Month view switch
-    - Calendar summary dashboard
-    - Daily revenue summary
-    - Convert single session → recurrence
-    - Advanced recurrence date-shift behavior
-    - Resize session (nếu có evidence)
+    - Resize — CHƯA CÓ HAR, không implement
+M8 ✅ Calendar Enhancement
+    - Recurrence Drag Following delta (drag_move=true)
+    - Session list price + repeat_group_id payload
+    - Week View enhancements (summary cards, Hôm nay, daily revenue, repeat/price visuals)
+    - Month View (42 cells, anchor month summary, 3-pill max, edit flow, safe navigation)
+    - Full-width / layout stabilization (Twenty Twenty-Four unconstrain, root anti-shrink)
 ```

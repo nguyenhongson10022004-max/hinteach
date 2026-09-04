@@ -62,7 +62,7 @@ Chưa test:
 
 ## GĐ3 — Schedule
 
-**Status: 🟢 M7 COMPLETED**
+**Status: ✅ COMPLETED** (M1–M8 hoàn tất, 2026-09-04)
 
 Đã hoàn thành:
 
@@ -73,6 +73,7 @@ Chưa test:
 - M5 — Quick Entry / Session Record / Score ✅
 - M6 — Calendar Actions ✅
 - M7 — Calendar Interaction ✅
+- M8 — Calendar Enhancement ✅
 
 ---
 
@@ -406,11 +407,63 @@ Out of scope chuyển sang GĐ3 M8:
 
 Commit:
 
-- `<commit>` — feat(schedule): complete gd3 m7 calendar interaction
+- `d9a5bc7` — feat(schedule): complete gd3 m7 calendar interaction
 
 Tag:
 
 - `gd3-m7-completed`
+
+---
+
+### M8 — Calendar Enhancement
+
+**Status: ✅ COMPLETED** (commits `714bf8b` → `7f7a373`, 2026-09-04)
+
+Phạm vi hoàn thành:
+
+- Phase 1: Recurrence Drag Following Delta (delta date/time shift cho chuỗi buổi sau khi kéo)
+- Phase 2: Session List payload exposure (bổ sung `price`, `repeat_group_id` trong `hinteach_session_list`)
+- Phase 3: Week View enhancements (summary cards 4 chỉ số, nút "Hôm nay", view switch shell, doanh thu ngày, recurrence icon, hiển thị học phí)
+- Phase 4: Month View (lưới 42 ô cố định, Monday-first, thống kê anchor-month, tối đa 3 pills + "+N buổi khác", click session mở edit, click ô chuyển sang tuần, điều hướng tháng an toàn)
+- Phase 5: Full-Width / Layout stabilization (giải quyết co hẹp 620px từ WordPress block theme, chống shrink flex layout, thống nhất độ rộng toolbar/summary/calendar, responsive local overflow)
+
+> ⚠️ **Lưu ý phạm vi:** Phase 5 là ổn định layout full-width và polish CSS cho Calendar, KHÔNG PHẢI redesign toàn diện giao diện HinTeach. Redesign UI/UX toàn diện hệ thống vẫn thuộc phạm vi tương lai.
+
+Đã triển khai:
+
+Backend:
+- `includes/ajax-schedule.php`:
+  - Thêm cờ `drag_move=true` phân biệt drag Following (dùng delta date/time) với edit modal Following (giữ giờ/phút tuyệt đối).
+  - Bổ sung `s.price`, `s.repeat_group_id` vào câu query `hinteach_session_list`.
+  - Không thay đổi database schema.
+
+Frontend:
+- `assets/modules/schedule.js`:
+  - Hỗ trợ 2 view: `'week'` và `'month'`.
+  - Render Month View 42 ô (7 cột × 6 hàng), xử lý ngày lân cận (adjacent), badge hôm nay.
+  - Thống kê 4 card đồng bộ theo view hiện tại (tuần đang xem hoặc tháng anchor đang xem).
+  - Tích hợp icon `↻` cho lịch lặp và hiển thị học phí format tiền tệ.
+  - Safe month navigation (dùng `new Date(year, month, 1)` tránh lỗi nhảy tháng ngày 29/30/31).
+- `assets/style.css`:
+  - Unconstrain WordPress block-theme constraints (`.entry-content:has(#hinteach-app)`).
+  - Root anti-shrink (`.ht-app`, `.ht-main`, `.ht-content`, `.ht-module`).
+  - Layout Month View và local scroll wrapper (`min-width: 768px`).
+  - Polish toolbar, summary cards (responsive 2x2 dưới 900px), `:focus-visible`.
+
+Verification:
+- ✅ Phase 3 automated QA: 8 passed, 0 failed.
+- ✅ Phase 4 automated QA: 12 passed, 0 failed, 2 accepted fixture skips.
+- ✅ Manual mutation regression: standalone Week drag move, recurring Following delta, Week drag create.
+- ✅ Phase 5 live width inspection: 1920px, 1440px, 1280px, 1024px pass.
+- ✅ Zero body-level horizontal overflow at tested desktop widths.
+- ✅ Cross-module layout smoke: Classes, Students, Tuition, Grades pass.
+
+Commits:
+- `714bf8b` — feat(schedule): add recurrence drag following delta
+- `f9446a9` — feat(schedule): expose price and recurrence in session list
+- `35dff6b` — feat(schedule): enhance week calendar view
+- `46d0145` — feat(schedule): add month calendar view
+- `7f7a373` — style(schedule): stabilize full-width calendar layout
 
 ---
 
@@ -438,7 +491,19 @@ Tag:
 
 - `80dc690` — feat: complete gd3 m6 calendar actions
 
-- `<commit>` — feat: complete gd3 m7 calendar interaction
+- `d9a5bc7` — feat: complete gd3 m7 calendar interaction
+
+- `860a1d5` — docs: finalize gd3 m7 completion references
+
+- `714bf8b` — feat(schedule): add recurrence drag following delta
+
+- `f9446a9` — feat(schedule): expose price and recurrence in session list
+
+- `35dff6b` — feat(schedule): enhance week calendar view
+
+- `46d0145` — feat(schedule): add month calendar view
+
+- `7f7a373` — style(schedule): stabilize full-width calendar layout
 ---
 
 ### GĐ3 — Completed
@@ -457,17 +522,19 @@ Tag:
 
 - M7 — Calendar Interaction ✅
 
+- M8 — Calendar Enhancement ✅
+
 ---
 
 ### GĐ3 — Còn lại
 
 Chưa triển khai:
 
-- Không còn milestone Schedule nào trong GĐ3.
+- Không còn milestone Schedule nào trong GĐ3. GĐ3 hoàn tất toàn bộ M1–M8.
 
 Planned next:
 
-- GĐ3 M8 — Calendar Enhancement
+- GĐ4 — Tuition (Học phí)
 
 ---
 
@@ -539,6 +606,14 @@ Không có bug tồn đọng đã xác định tại thời điểm này.
 
 ## Latest Important Changes
 
+- 2026-09-04: Hoàn thành GĐ3 M8 — Calendar Enhancement. Commits `714bf8b` → `7f7a373`.
+  - Phase 1: Recurrence drag Following delta (`714bf8b`)
+  - Phase 2: Expose price + repeat_group_id in session list (`f9446a9`)
+  - Phase 3: Week View enhancements (`35dff6b`)
+  - Phase 4: Month View 42 cells (`46d0145`)
+  - Phase 5: Full-width / layout stabilization (`7f7a373`)
+  - Automated QA + manual mutation regression hoàn tất.
+
 - 2026-08-31: Hoàn thành GĐ3 M7 — Calendar Interaction. Commit `d9a5bc7`, tag `gd3-m7-completed`.
   - Drag Create
   - Drag Move
@@ -564,14 +639,8 @@ Không có bug tồn đọng đã xác định tại thời điểm này.
 
 ## Next Recommended Task
 
-1. Chuẩn bị GĐ3 M8 — Calendar Enhancement
-
-Scope dự kiến:
-
-- Week/Month view switch
-- Calendar summary dashboard
-- Daily revenue summary
-- Convert single session → recurrence
-- Advanced recurrence date-shift behavior
-
-2. Không triển khai Resize nếu chưa có evidence HAR.
+1. Khởi động GĐ4 — Tuition (Học phí)
+   - Tham chiếu spec: `docs/specs/tuition.md`
+   - Triển khai `includes/ajax-tuition.php`, `assets/modules/tuition.js`
+   - Tính toán học phí theo 3 billing_mode (session, course, monthly)
+   - Phụ thu / giảm phí và xuất phiếu học phí
